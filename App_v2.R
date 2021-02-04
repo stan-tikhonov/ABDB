@@ -69,6 +69,7 @@ for (name in names(agingsignaturesapp)){
   agingsignaturesapp[[name]]$logFC = round(agingsignaturesapp[[name]]$logFC, digits = 2)
   agingsignaturesapp[[name]]$pvalue = formatC(agingsignaturesapp[[name]]$pval, format = "e", digits = 2)
   agingsignaturesapp[[name]]$adjusted_pvalue = formatC(agingsignaturesapp[[name]]$adj_pval, format = "e", digits = 2)
+  agingsignaturesapp[[name]]$entrez = paste0('<a href="https://www.ncbi.nlm.nih.gov/gene/?term=', agingsignaturesapp[[name]]$entrez, '">', agingsignaturesapp[[name]]$entrez, '</a>')
 }
 
 
