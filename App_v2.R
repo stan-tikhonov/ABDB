@@ -14,10 +14,10 @@ for (name in names(agingsignatures)){
   agingsignatures[[name]]$entrez = rownames(agingsignatures[[name]])
 }
 
-maintable = agingsignatures[["Brain"]]
+maintable = agingsignatures[["Brain"]][,c("Brain_logFC", "Brain_pval", "Brain_adj_pval", "entrez")]
 
 for (name in names(agingsignatures)[-1]){
-  maintable = full_join(maintable, agingsignatures[[name]])
+  maintable = full_join(maintable, agingsignatures[[name]][, c(paste0(name, c("_logFC", "_pval", "_adj_pval")), "entrez")])
 }
 
 maintable$presence_tissues = rowSums(!is.na(maintable[, grepl("^(Brain|Liver|Muscle)_logFC$", colnames(maintable))]))
@@ -26,12 +26,14 @@ maintable$presence_compound = as.numeric(!is.na(maintable[, "All_logFC"]))
 maintable$presence_total = rowSums(!is.na(maintable[, grepl("^(Mouse|Rat|Human|All|Brain|Muscle|Liver)_logFC$", colnames(maintable))]))
 
 maintable$geommean_pval_tissues = (maintable$Brain_adj_pval * maintable$Muscle_adj_pval * maintable$Liver_adj_pval) ^ (1/3)
-maintable$geommean_pval_tissues_robust = (maintable$Brain_pval_robust * maintable$Muscle_pval_robust * maintable$Liver_pval_robust) ^ (1/3)
-maintable$geommean_pval_tissues_LOO = (maintable$Brain_adj_pval_LOO * maintable$Muscle_adj_pval_LOO * maintable$Liver_adj_pval_LOO) ^ (1/3)
+#maintable$geommean_pval_tissues_robust = (maintable$Brain_pval_robust * maintable$Muscle_pval_robust * maintable$Liver_pval_robust) ^ (1/3)
+#$geommean_pval_tissues_LOO = (maintable$Brain_adj_pval_LOO * maintable$Muscle_adj_pval_LOO * maintable$Liver_adj_pval_LOO) ^ (1/3)
 
 maintable$geommean_pval_species = (maintable$Human_adj_pval * maintable$Mouse_adj_pval * maintable$Rat_adj_pval) ^ (1/3)
-maintable$geommean_pval_species_robust = (maintable$Human_pval_robust * maintable$Mouse_pval_robust * maintable$Rat_pval_robust) ^ (1/3)
-maintable$geommean_pval_species_LOO = (maintable$Human_adj_pval_LOO * maintable$Mouse_adj_pval_LOO * maintable$Rat_adj_pval_LOO) ^ (1/3)
+#maintable$geommean_pval_species_robust = (maintable$Human_pval_robust * maintable$Mouse_pval_robust * maintable$Rat_pval_robust) ^ (1/3)
+#maintable$geommean_pval_species_LOO = (maintable$Human_adj_pval_LOO * maintable$Mouse_adj_pval_LOO * maintable$Rat_adj_pval_LOO) ^ (1/3)
+
+tablefordownloading = maintable
 
 for (name in c("Brain", "Muscle", "Liver", "Mouse", "Human", "Rat", "All")){
   maintable[,paste0(name, "_logFC")] = round(maintable[,paste0(name, "_logFC")], digits = 2)
@@ -79,6 +81,10 @@ ui <- fluidPage(
   
   
   navbarPage("ABDB",
+    tabPanel("Home",
+            tags$p("Welcome to Aging Biomarker Database (ABDB)! Below is the link to download the table for parsing:"),
+            downloadButton("diffexpr_download", "Download")
+    ),
     navbarMenu("Signatures of tissues",
                tabPanel("Brain",
                         
@@ -105,6 +111,7 @@ ui <- fluidPage(
                           )
                         )
                ),
+              
                tabPanel("Muscle",
                         sidebarLayout(
                           sidebarPanel(
@@ -252,8 +259,7 @@ ui <- fluidPage(
                  DT::dataTableOutput("compound_maintable")
                )
              )
-    ),
-    tabPanel("Data for parsing")
+    )
   )
 
 )
@@ -261,6 +267,13 @@ ui <- fluidPage(
 
 
 server = function(input, output) {
+  
+  output$diffexpr_download <- downloadHandler(
+    filename = "aging_diffexpr_data.csv",
+    content = function(file) {
+      write.table(tablefordownloading, file, row.names = FALSE, sep="\t")
+    }
+  )
   
   brain_table = reactive({temp = agingsignaturesapp[["Brain"]] %>% filter(presence_total >= input$brain_presence) %>% arrange(adj_pval)
                   if (input$brain_sort == "adj_pval"){
