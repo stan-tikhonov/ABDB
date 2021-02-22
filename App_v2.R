@@ -76,13 +76,19 @@ for (name in names(agingsignaturesapp)){
 
 
 ui <- fluidPage(
-  
-  titlePanel("Aging Biomarkers Database"),
-  
-  
   navbarPage("ABDB",
     tabPanel("Home",
-            tags$p("Welcome to Aging Biomarker Database (ABDB)! Below is the link to download the table for parsing:"),
+            tags$h1("Aging Biomarker Database"),
+            tags$p("Welcome to Aging Biomarker Database (ABDB)!", style="font-size:15px;"),
+            tags$p("This is a tool where one can visualize age-related gene expression 
+                   changes in different mammalian species and tissues. The tool is actually a graphical 
+                    interface for 7 quantitative signatures of aging, which one can download as a .csv file at the 
+                    bottom of the page. Currently, things that 
+                   can be visualized only include the quantitative differential expression data (LogFC) for 
+                    every gene in a form that allows easy comparison 
+                    of the expression changes between the signatures.", style="font-size:15px;"),
+            tags$p("The manual page contains all the information needed to understand and work with the contents of this website.", style="font-size:15px;"),
+            tags$p("The differential expression data comprising all 7 signatures can be downloaded with the following link:", style="font-size:15px;"),
             downloadButton("diffexpr_download", "Download")
     ),
     navbarMenu("Signatures of tissues",
@@ -259,6 +265,47 @@ ui <- fluidPage(
                  DT::dataTableOutput("compound_maintable")
                )
              )
+    ),
+    tabPanel("Manual",
+      navlistPanel(
+        tabPanel(
+          "Signatures of aging",
+          tags$h2("Signatures of aging"),
+            tags$p("This website contains a graphical interface for 7 signatures of aging. Each signature 
+                 represents a general pattern of age-related gene expression changes in the corresponding datasets. The datasets chosen for 
+                 the signatures of species included different tissues and sexes of the same species. The tissue signatures represent the gene expression changes 
+                 that are common across species but specific for the tissues. As for the compound signature, it has been built on 
+                 all of the data, including all 3 species (human, mouse, rat) and all tissues (brain, liver, muscle, lung, heart, etc.), which is approximately 100 datasets 
+                 (where one dataset contains information about the age-related differential expression of genes for a specific 
+                 tissue of a specific species with a specific sex).", style="font-size:15px;"),
+          tags$p("One can search for a particular gene within a signature in the corresponding signature tab. For each gene, there are two identifiers: Entrez ID and GeneSymbol (both correspond to mouse genes or mouse orthologs 
+                 in all of the signatures). The logFC column represents how much the expression of a given gene increases (positive values) or decreases (negative values) with age. The values in this column are not just 
+                 average logFCs accross the datasets of a signature, but rather the output of a mixed-effect model, which produces an average weighted by standard errors and takes into account 
+                 possible batch effects (same study, same tissue, etc.). It is important to understand that each individual logFC value in a signature is of little use because the data 
+                 was normalized and the timescale was distorted as a result. These values can only be compared with each other. The table also includes columns that display statistical significance of the logFCs (adjusted pvalue 
+                 corresponds to BH adjustment).", style="font-size:15px;")
+        ),
+        tabPanel(
+          "Comparative signature interface",
+          tags$h2("Comparative signature interface"),
+          DT::dataTableOutput("demo_table"),
+            tags$p("Comparative signature interface can be found in each of the signature tabs. Its main purpose is to show 
+                   how conservative the change of each gene is across signatures. The green arrows represent that the gene is upregulated with age, and red arrows represent the downregulation of the gene. 
+                   The numbers next to the arrows are the corresponding logFCs rounded to 2 decimal places (so 0 can actually be a very small up- or downregulation).", style="font-size:15px;")
+        ),
+        tabPanel(
+          "Download data",
+          tags$h2("Download data"),
+          tags$p("The .csv file that can be downloaded from the home page contains one big table with all of the genes 
+                 and data from all of the signatures. From each signature there are three columns: logFC, pvalue and adjusted_pvalue. These columns 
+                  are the actual data, whereas the rest of the columns are all derived from it and their sole purpose is to make gene filtering easier. The presence 
+                 columns represent in how many signatures the gene is present (so it's a value from 0 to 3 for presence_species and 
+                 presence_tissues, a value from 1 to 7 for presence_all and a value from 0 to 1 for presence_compound). If a gene is not present in a signature, it gets NAs in the corresponding 3 columns. 
+                 The table also has columns containing geometric means of adjusted pvalues accross the signatures of species and the signatures of tissues.", style="font-size:15px;")
+          
+        )
+      )
+             
     )
   )
 
@@ -273,6 +320,12 @@ server = function(input, output) {
     content = function(file) {
       write.table(tablefordownloading, file, row.names = FALSE, sep="\t")
     }
+  )
+  
+  demo_table = (agingsignaturesapp[["Brain"]] %>% filter(presence_total >= 5) %>% arrange(adj_pval))[1:2, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")]
+  
+  output$demo_table = DT::renderDataTable(
+    demo_table, escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=F)
   )
   
   brain_table = reactive({temp = agingsignaturesapp[["Brain"]] %>% filter(presence_total >= input$brain_presence) %>% arrange(adj_pval)
