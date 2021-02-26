@@ -82,14 +82,12 @@ ui <- fluidPage(
             tags$p("Welcome to Aging Biomarker Database (ABDB)!", style="font-size:15px;"),
             tags$p("This is a tool where one can visualize age-related gene expression 
                    changes in different mammalian species and tissues. The tool is actually a graphical 
-                    interface for 7 quantitative signatures of aging, which one can download as a .csv file at the 
-                    bottom of the page. Currently, things that 
+                    interface for 7 quantitative signatures of aging, which one can download as a .csv file in the 
+                    Downloads section. Currently, things that 
                    can be visualized only include the quantitative differential expression data (LogFC) for 
                     every gene in a form that allows easy comparison 
                     of the expression changes between the signatures.", style="font-size:15px;"),
-            tags$p("The manual page contains all the information needed to understand and work with the contents of this website.", style="font-size:15px;"),
-            tags$p("The differential expression data comprising all 7 signatures can be downloaded with the following link:", style="font-size:15px;"),
-            downloadButton("diffexpr_download", "Download")
+            tags$p("The manual page contains all the information needed to understand and work with the contents of this website.", style="font-size:15px;")
     ),
     navbarMenu("Signatures of tissues",
                tabPanel("Brain",
@@ -108,7 +106,7 @@ ui <- fluidPage(
                                          max = 1,
                                          min = 0,
                                          step = 0.01),
-                            selectInput(inputId = "brain_sort",
+                            selectInput(inputId = "brain_sortby",
                                         label = "Sort by:",
                                         choices = c("LogFC (ascending)" = "logFC_a",
                                                     "LogFC (descending)" = "logFC_d",
@@ -139,7 +137,7 @@ ui <- fluidPage(
                                          max = 1,
                                          min = 0,
                                          step = 0.01),
-                            selectInput(inputId = "muscle_sort",
+                            selectInput(inputId = "muscle_sortby",
                                         label = "Sort by:",
                                         choices = c("LogFC (ascending)" = "logFC_a",
                                                     "LogFC (descending)" = "logFC_d",
@@ -169,7 +167,7 @@ ui <- fluidPage(
                                          max = 1,
                                          min = 0,
                                          step = 0.01),
-                            selectInput(inputId = "liver_sort",
+                            selectInput(inputId = "liver_sortby",
                                         label = "Sort by:",
                                         choices = c("LogFC (ascending)" = "logFC_a",
                                                     "LogFC (descending)" = "logFC_d",
@@ -202,7 +200,7 @@ ui <- fluidPage(
                                 max = 1,
                                 min = 0,
                                 step = 0.01),
-                   selectInput(inputId = "mouse_sort",
+                   selectInput(inputId = "mouse_sortby",
                                label = "Sort by:",
                                choices = c("LogFC (ascending)" = "logFC_a",
                                            "LogFC (descending)" = "logFC_d",
@@ -232,7 +230,7 @@ ui <- fluidPage(
                                 max = 1,
                                 min = 0,
                                 step = 0.01),
-                   selectInput(inputId = "human_sort",
+                   selectInput(inputId = "human_sortby",
                                label = "Sort by:",
                                choices = c("LogFC (ascending)" = "logFC_a",
                                            "LogFC (descending)" = "logFC_d",
@@ -262,7 +260,7 @@ ui <- fluidPage(
                                 max = 1,
                                 min = 0,
                                 step = 0.01),
-                   selectInput(inputId = "rat_sort",
+                   selectInput(inputId = "rat_sortby",
                                label = "Sort by:",
                                choices = c("LogFC (ascending)" = "logFC_a",
                                            "LogFC (descending)" = "logFC_d",
@@ -293,7 +291,7 @@ ui <- fluidPage(
                               max = 1,
                               min = 0,
                               step = 0.01),
-                 selectInput(inputId = "compound_sort",
+                 selectInput(inputId = "compound_sortby",
                              label = "Sort by:",
                              choices = c("LogFC (ascending)" = "logFC_a",
                                          "LogFC (descending)" = "logFC_d",
@@ -308,6 +306,13 @@ ui <- fluidPage(
                )
              )
     ),
+    tabPanel("Downloads",
+             tags$h2("Data for downloading"),
+             tags$p("To download the table with the quantitative differential expression data, click the button below:", style="font-size:15px;"),
+             downloadButton("diffexpr_download", "Download"),
+             tags$p("The table is tab-separated and contains the differential expression data of all 7 signatures. From each signature there are 
+                    three columns (logFC, p-value and adjusted p-value); the other columns are only present to make gene filtering easier. The complete 
+                    breakdown of what each column means can be found in the Manual section.", style="font-size:15px;")),
     tabPanel("Manual",
       navlistPanel(
         tabPanel(
@@ -338,8 +343,8 @@ ui <- fluidPage(
         tabPanel(
           "Download data",
           tags$h2("Download data"),
-          tags$p("The .csv file that can be downloaded from the home page contains one big table with all of the genes 
-                 and data from all of the signatures (it's tab-separated). From each signature there are three columns: logFC, pvalue and adjusted_pvalue. These columns 
+          tags$p("The .csv file in the Downloads section contains one big table with all of the genes 
+                 and differential expression data from all of the signatures (it's tab-separated). From each signature there are three columns: logFC, pvalue and adjusted_pvalue. These columns 
                   are the actual data, whereas the rest of the columns are all derived from it and their sole purpose is to make gene filtering easier. The presence 
                  columns represent in how many signatures the gene is present (so it's a value from 0 to 3 for presence_species and 
                  presence_tissues, a value from 1 to 7 for presence_all and a value from 0 to 1 for presence_compound). If a gene is not present in a signature, it gets NAs in the corresponding 3 columns. 
@@ -371,11 +376,11 @@ server = function(input, output) {
   )
   
   brain_table = reactive({temp = agingsignaturesapp[["Brain"]] %>% filter(presence_total >= input$brain_presence) %>% filter(adj_pval < input$brain_pval_thres) %>% arrange(adj_pval)
-                  if (input$brain_sort == "adj_pval"){
+                  if (input$brain_sortby == "adj_pval"){
                     temp = temp %>% arrange(adj_pval)
-                  } else if (input$brain_sort == "logFC_a"){
+                  } else if (input$brain_sortby == "logFC_a"){
                     temp = temp %>% arrange(logFC)
-                  } else if (input$brain_sort == "logFC_d"){
+                  } else if (input$brain_sortby == "logFC_d"){
                     temp = temp %>% arrange(desc(logFC))
                   }
                   return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
@@ -387,11 +392,11 @@ server = function(input, output) {
   )
   
   muscle_table = reactive({temp = agingsignaturesapp[["Muscle"]] %>% filter(presence_total >= input$muscle_presence) %>% filter(adj_pval < input$muscle_pval_thres) %>% arrange(adj_pval)
-  if (input$muscle_sort == "adj_pval"){
+  if (input$muscle_sortby == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
-  } else if (input$muscle_sort == "logFC_a"){
+  } else if (input$muscle_sortby == "logFC_a"){
     temp = temp %>% arrange(logFC)
-  } else if (input$muscle_sort == "logFC_d"){
+  } else if (input$muscle_sortby == "logFC_d"){
     temp = temp %>% arrange(desc(logFC))
   }
   return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
@@ -403,11 +408,11 @@ server = function(input, output) {
   )
   
   liver_table = reactive({temp = agingsignaturesapp[["Liver"]] %>% filter(presence_total >= input$liver_presence) %>% filter(adj_pval < input$liver_pval_thres) %>% arrange(adj_pval)
-  if (input$liver_sort == "adj_pval"){
+  if (input$liver_sortby == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
-  } else if (input$liver_sort == "logFC_a"){
+  } else if (input$liver_sortby == "logFC_a"){
     temp = temp %>% arrange(logFC)
-  } else if (input$liver_sort == "logFC_d"){
+  } else if (input$liver_sortby == "logFC_d"){
     temp = temp %>% arrange(desc(logFC))
   }
   return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
@@ -419,11 +424,11 @@ server = function(input, output) {
   )
   
   mouse_table = reactive({temp = agingsignaturesapp[["Mouse"]] %>% filter(presence_total >= input$mouse_presence) %>% filter(adj_pval < input$mouse_pval_thres) %>% arrange(adj_pval)
-  if (input$mouse_sort == "adj_pval"){
+  if (input$mouse_sortby == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
-  } else if (input$mouse_sort == "logFC_a"){
+  } else if (input$mouse_sortby == "logFC_a"){
     temp = temp %>% arrange(logFC)
-  } else if (input$mouse_sort == "logFC_d"){
+  } else if (input$mouse_sortby == "logFC_d"){
     temp = temp %>% arrange(desc(logFC))
   }
   return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
@@ -435,11 +440,11 @@ server = function(input, output) {
   )
   
   human_table = reactive({temp = agingsignaturesapp[["Human"]] %>% filter(presence_total >= input$human_presence) %>% filter(adj_pval < input$human_pval_thres) %>% arrange(adj_pval)
-  if (input$human_sort == "adj_pval"){
+  if (input$human_sortby == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
-  } else if (input$human_sort == "logFC_a"){
+  } else if (input$human_sortby == "logFC_a"){
     temp = temp %>% arrange(logFC)
-  } else if (input$human_sort == "logFC_d"){
+  } else if (input$human_sortby == "logFC_d"){
     temp = temp %>% arrange(desc(logFC))
   }
   return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
@@ -451,11 +456,11 @@ server = function(input, output) {
   )
   
   rat_table = reactive({temp = agingsignaturesapp[["Rat"]] %>% filter(presence_total >= input$rat_presence) %>% filter(adj_pval < input$rat_pval_thres) %>% arrange(adj_pval)
-  if (input$rat_sort == "adj_pval"){
+  if (input$rat_sortby == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
-  } else if (input$rat_sort == "logFC_a"){
+  } else if (input$rat_sortby == "logFC_a"){
     temp = temp %>% arrange(logFC)
-  } else if (input$rat_sort == "logFC_d"){
+  } else if (input$rat_sortby == "logFC_d"){
     temp = temp %>% arrange(desc(logFC))
   }
   return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
@@ -467,11 +472,11 @@ server = function(input, output) {
   )
   
   compound_table = reactive({temp = agingsignaturesapp[["All"]] %>% filter(presence_total >= input$compound_presence) %>% filter(adj_pval < input$compound_pval_thres) %>% arrange(adj_pval)
-  if (input$compound_sort == "adj_pval"){
+  if (input$compound_sortby == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
-  } else if (input$compound_sort == "logFC_a"){
+  } else if (input$compound_sortby == "logFC_a"){
     temp = temp %>% arrange(logFC)
-  } else if (input$compound_sort == "logFC_d"){
+  } else if (input$compound_sortby == "logFC_d"){
     temp = temp %>% arrange(desc(logFC))
   }
   return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
