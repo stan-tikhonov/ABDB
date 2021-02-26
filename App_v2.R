@@ -102,6 +102,12 @@ ui <- fluidPage(
                                         max = 7,
                                         value = 1
                             ),
+                            numericInput(inputId = "brain_pval_thres",
+                                         label = "Threshold for adjusted pvalue:",
+                                         value = 1,
+                                         max = 1,
+                                         min = 0,
+                                         step = 0.01),
                             selectInput(inputId = "brain_sort",
                                         label = "Sort by:",
                                         choices = c("LogFC (ascending)" = "logFC_a",
@@ -127,6 +133,12 @@ ui <- fluidPage(
                                         max = 7,
                                         value = 1
                             ),
+                            numericInput(inputId = "muscle_pval_thres",
+                                         label = "Threshold for adjusted pvalue:",
+                                         value = 1,
+                                         max = 1,
+                                         min = 0,
+                                         step = 0.01),
                             selectInput(inputId = "muscle_sort",
                                         label = "Sort by:",
                                         choices = c("LogFC (ascending)" = "logFC_a",
@@ -151,6 +163,12 @@ ui <- fluidPage(
                                         max = 7,
                                         value = 1
                             ),
+                            numericInput(inputId = "liver_pval_thres",
+                                         label = "Threshold for adjusted pvalue:",
+                                         value = 1,
+                                         max = 1,
+                                         min = 0,
+                                         step = 0.01),
                             selectInput(inputId = "liver_sort",
                                         label = "Sort by:",
                                         choices = c("LogFC (ascending)" = "logFC_a",
@@ -178,6 +196,12 @@ ui <- fluidPage(
                                max = 7,
                                value = 1
                    ),
+                   numericInput(inputId = "mouse_pval_thres",
+                                label = "Threshold for adjusted pvalue:",
+                                value = 1,
+                                max = 1,
+                                min = 0,
+                                step = 0.01),
                    selectInput(inputId = "mouse_sort",
                                label = "Sort by:",
                                choices = c("LogFC (ascending)" = "logFC_a",
@@ -202,6 +226,12 @@ ui <- fluidPage(
                                max = 7,
                                value = 1
                    ),
+                   numericInput(inputId = "human_pval_thres",
+                                label = "Threshold for adjusted pvalue:",
+                                value = 1,
+                                max = 1,
+                                min = 0,
+                                step = 0.01),
                    selectInput(inputId = "human_sort",
                                label = "Sort by:",
                                choices = c("LogFC (ascending)" = "logFC_a",
@@ -226,6 +256,12 @@ ui <- fluidPage(
                                max = 7,
                                value = 1
                    ),
+                   numericInput(inputId = "rat_pval_thres",
+                                label = "Threshold for adjusted pvalue:",
+                                value = 1,
+                                max = 1,
+                                min = 0,
+                                step = 0.01),
                    selectInput(inputId = "rat_sort",
                                label = "Sort by:",
                                choices = c("LogFC (ascending)" = "logFC_a",
@@ -251,6 +287,12 @@ ui <- fluidPage(
                              max = 7,
                              value = 1
                  ),
+                 numericInput(inputId = "compound_pval_thres",
+                              label = "Threshold for adjusted pvalue:",
+                              value = 1,
+                              max = 1,
+                              min = 0,
+                              step = 0.01),
                  selectInput(inputId = "compound_sort",
                              label = "Sort by:",
                              choices = c("LogFC (ascending)" = "logFC_a",
@@ -297,7 +339,7 @@ ui <- fluidPage(
           "Download data",
           tags$h2("Download data"),
           tags$p("The .csv file that can be downloaded from the home page contains one big table with all of the genes 
-                 and data from all of the signatures. From each signature there are three columns: logFC, pvalue and adjusted_pvalue. These columns 
+                 and data from all of the signatures (it's tab-separated). From each signature there are three columns: logFC, pvalue and adjusted_pvalue. These columns 
                   are the actual data, whereas the rest of the columns are all derived from it and their sole purpose is to make gene filtering easier. The presence 
                  columns represent in how many signatures the gene is present (so it's a value from 0 to 3 for presence_species and 
                  presence_tissues, a value from 1 to 7 for presence_all and a value from 0 to 1 for presence_compound). If a gene is not present in a signature, it gets NAs in the corresponding 3 columns. 
@@ -316,9 +358,9 @@ ui <- fluidPage(
 server = function(input, output) {
   
   output$diffexpr_download <- downloadHandler(
-    filename = "aging_diffexpr_data.csv",
+    filename = "aging_diffexpr_data_first100.csv",
     content = function(file) {
-      write.table(tablefordownloading, file, row.names = FALSE, sep="\t")
+      write.table(tablefordownloading[1:100,], file, row.names = FALSE, sep="\t")
     }
   )
   
@@ -328,7 +370,7 @@ server = function(input, output) {
     demo_table, escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=F)
   )
   
-  brain_table = reactive({temp = agingsignaturesapp[["Brain"]] %>% filter(presence_total >= input$brain_presence) %>% arrange(adj_pval)
+  brain_table = reactive({temp = agingsignaturesapp[["Brain"]] %>% filter(presence_total >= input$brain_presence) %>% filter(adj_pval < input$brain_pval_thres) %>% arrange(adj_pval)
                   if (input$brain_sort == "adj_pval"){
                     temp = temp %>% arrange(adj_pval)
                   } else if (input$brain_sort == "logFC_a"){
@@ -344,7 +386,7 @@ server = function(input, output) {
     brain_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
   )
   
-  muscle_table = reactive({temp = agingsignaturesapp[["Muscle"]] %>% filter(presence_total >= input$muscle_presence) %>% arrange(adj_pval)
+  muscle_table = reactive({temp = agingsignaturesapp[["Muscle"]] %>% filter(presence_total >= input$muscle_presence) %>% filter(adj_pval < input$muscle_pval_thres) %>% arrange(adj_pval)
   if (input$muscle_sort == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
   } else if (input$muscle_sort == "logFC_a"){
@@ -360,7 +402,7 @@ server = function(input, output) {
     muscle_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
   )
   
-  liver_table = reactive({temp = agingsignaturesapp[["Liver"]] %>% filter(presence_total >= input$liver_presence) %>% arrange(adj_pval)
+  liver_table = reactive({temp = agingsignaturesapp[["Liver"]] %>% filter(presence_total >= input$liver_presence) %>% filter(adj_pval < input$liver_pval_thres) %>% arrange(adj_pval)
   if (input$liver_sort == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
   } else if (input$liver_sort == "logFC_a"){
@@ -376,7 +418,7 @@ server = function(input, output) {
     liver_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
   )
   
-  mouse_table = reactive({temp = agingsignaturesapp[["Mouse"]] %>% filter(presence_total >= input$mouse_presence) %>% arrange(adj_pval)
+  mouse_table = reactive({temp = agingsignaturesapp[["Mouse"]] %>% filter(presence_total >= input$mouse_presence) %>% filter(adj_pval < input$mouse_pval_thres) %>% arrange(adj_pval)
   if (input$mouse_sort == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
   } else if (input$mouse_sort == "logFC_a"){
@@ -392,7 +434,7 @@ server = function(input, output) {
     mouse_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
   )
   
-  human_table = reactive({temp = agingsignaturesapp[["Human"]] %>% filter(presence_total >= input$human_presence) %>% arrange(adj_pval)
+  human_table = reactive({temp = agingsignaturesapp[["Human"]] %>% filter(presence_total >= input$human_presence) %>% filter(adj_pval < input$human_pval_thres) %>% arrange(adj_pval)
   if (input$human_sort == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
   } else if (input$human_sort == "logFC_a"){
@@ -408,7 +450,7 @@ server = function(input, output) {
     human_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
   )
   
-  rat_table = reactive({temp = agingsignaturesapp[["Rat"]] %>% filter(presence_total >= input$rat_presence) %>% arrange(adj_pval)
+  rat_table = reactive({temp = agingsignaturesapp[["Rat"]] %>% filter(presence_total >= input$rat_presence) %>% filter(adj_pval < input$rat_pval_thres) %>% arrange(adj_pval)
   if (input$rat_sort == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
   } else if (input$rat_sort == "logFC_a"){
@@ -424,7 +466,7 @@ server = function(input, output) {
     rat_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
   )
   
-  compound_table = reactive({temp = agingsignaturesapp[["All"]] %>% filter(presence_total >= input$compound_presence) %>% arrange(adj_pval)
+  compound_table = reactive({temp = agingsignaturesapp[["All"]] %>% filter(presence_total >= input$compound_presence) %>% filter(adj_pval < input$compound_pval_thres) %>% arrange(adj_pval)
   if (input$compound_sort == "adj_pval"){
     temp = temp %>% arrange(adj_pval)
   } else if (input$compound_sort == "logFC_a"){
