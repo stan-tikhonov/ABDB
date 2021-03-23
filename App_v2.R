@@ -39,21 +39,30 @@ for (name in c("Brain", "Muscle", "Liver", "Mouse", "Human", "Rat", "All")){
   maintable[,paste0(name, "_logFC")] = round(maintable[,paste0(name, "_logFC")], digits = 2)
 }
 
-for (i in 1:length(rownames(maintable))){
-  for (name in c("Brain", "Muscle", "Liver", "Mouse", "Human", "Rat", "All")){
-    
-    if (is.na(maintable[i, paste0(name, "_logFC")])){
-      maintable[i, paste0(name, "_logFC")] = "NA"
-    } else if (maintable[i, paste0(name, "_logFC")] == 0){
-      maintable[i, paste0(name, "_logFC")] = as.character(maintable[i, paste0(name, "_logFC")])
-    } else if (maintable[i, paste0(name, "_logFC")] < 0){
-      maintable[i, paste0(name, "_logFC")] = paste0(as.character(maintable[i, paste0(name, "_logFC")]), ' <span style = "color:red;font-size:22px">&darr;</span>')
-    } else {
-      maintable[i, paste0(name, "_logFC")] = paste0(as.character(maintable[i, paste0(name, "_logFC")]), ' <span style = "color:lime;font-size:22px">&uarr;</span>')
-    }
-    
-  }
-}
+# for (i in 1:length(rownames(maintable))){
+#   for (name in c("Brain", "Muscle", "Liver", "Mouse", "Human", "Rat", "All")){
+#     if (is.na(maintable[i, paste0(name, "_logFC")])){
+#        maintable[i, paste0(name, "_logFC")] = "NA"
+#     }
+#   }
+# }
+
+
+# for (i in 1:length(rownames(maintable))){
+#   for (name in c("Brain", "Muscle", "Liver", "Mouse", "Human", "Rat", "All")){
+#     
+#     if (is.na(maintable[i, paste0(name, "_logFC")])){
+#       maintable[i, paste0(name, "_logFC")] = "NA"
+#     } else if (maintable[i, paste0(name, "_logFC")] == 0){
+#       maintable[i, paste0(name, "_logFC")] = as.character(maintable[i, paste0(name, "_logFC")])
+#     } else if (maintable[i, paste0(name, "_logFC")] < 0){
+#       maintable[i, paste0(name, "_logFC")] = paste0(as.character(maintable[i, paste0(name, "_logFC")]), ' <span style = "color:red;font-size:22px">&darr;</span>')
+#     } else {
+#       maintable[i, paste0(name, "_logFC")] = paste0(as.character(maintable[i, paste0(name, "_logFC")]), ' <span style = "color:lime;font-size:22px">&uarr;</span>')
+#     }
+#     
+#   }
+# }
 
 presencelookup = maintable[,c("entrez", "presence_total")]
 
@@ -375,6 +384,35 @@ server = function(input, output) {
     demo_table, escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=F)
   )
   
+  js <- c(
+    "function(row, data, displayNum, index){",
+    "  var x = data[4];",
+    "  $('td:eq(4)', row).html(x.toExponential(2));",
+    "  var x = data[5];",
+    "  $('td:eq(5)', row).html(x.toExponential(2));",
+    "  for (i=6; i<13; i++){",
+    "    var x = data[i];",
+    "    var a = i.toString(10);",
+    "    $('td:eq(' + a + ')', row).html(function(){",
+    "      try{",
+    "        if (x < 0){",
+    "          return x + ' <span style = \"color:red;font-size:22px\">&darr;</span>';",
+    "        } else if (x > 0){",
+    "          return x + ' <span style = \"color:lime;font-size:22px\">&uarr;</span>';",
+    "        } else if (x === null){",
+    "          return 'NA';",
+    "        } else {",
+    "          return x;",
+    "        }",
+    "      } catch(error){",
+    "        return x;",
+    "      }",
+    "//    return x.toExponential(2) + ' <span style = \"color:red;font-size:22px\">&darr;</span>';",
+    "    });",
+    "  }",
+    "}"
+  )
+  
   brain_table = reactive({temp = agingsignaturesapp[["Brain"]] %>% filter(presence_total >= input$brain_presence) %>% filter(adj_pval < input$brain_pval_thres) %>% arrange(adj_pval)
                   if (input$brain_sortby == "adj_pval"){
                     temp = temp %>% arrange(adj_pval)
@@ -383,12 +421,12 @@ server = function(input, output) {
                   } else if (input$brain_sortby == "logFC_d"){
                     temp = temp %>% arrange(desc(logFC))
                   }
-                  return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
+                  return(temp[, c("entrez", "genesymbol", "logFC", "pval", "adj_pval", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
   })
   
   
   output$brain_maintable = DT::renderDataTable(
-    brain_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
+    brain_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=T, rowCallback = JS(js))
   )
   
   muscle_table = reactive({temp = agingsignaturesapp[["Muscle"]] %>% filter(presence_total >= input$muscle_presence) %>% filter(adj_pval < input$muscle_pval_thres) %>% arrange(adj_pval)
