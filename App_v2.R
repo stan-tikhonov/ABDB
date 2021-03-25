@@ -3,6 +3,7 @@ library(tidyverse)
 library(org.Mm.eg.db)
 library(annotate)
 library(DT)
+library(magrittr)
 
 # load the signature list
 load("agingsignatures_v4.RData")
@@ -68,6 +69,11 @@ presencelookup = maintable[,c("entrez", "presence_total")]
 
 agingsignaturesapp <- agingsignatures_v3
 
+signfactor = sign(maintable[,c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
+signfactor[signfactor == 0] = 1
+signfactor[is.na(maintable[,c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])] = NA
+maintable[,c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")] = maintable[,c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")] * signfactor
+
 for (name in names(agingsignaturesapp)){
   agingsignaturesapp[[name]]$entrez = rownames(agingsignaturesapp[[name]])
   agingsignaturesapp[[name]] = left_join(agingsignaturesapp[[name]], presencelookup)
@@ -76,10 +82,11 @@ for (name in names(agingsignaturesapp)){
   agingsignaturesapp[[name]]$genesymbol = symbols[agingsignaturesapp[[name]]$entrez]
   
   agingsignaturesapp[[name]] = left_join(agingsignaturesapp[[name]], maintable[,c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "entrez")], by = c("entrez"))
+  agingsignaturesapp[[name]] = left_join(agingsignaturesapp[[name]], maintable[,c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval", "entrez")], by = c("entrez"))
   
   agingsignaturesapp[[name]]$logFC = round(agingsignaturesapp[[name]]$logFC, digits = 2)
-  agingsignaturesapp[[name]]$pvalue = formatC(agingsignaturesapp[[name]]$pval, format = "e", digits = 2)
-  agingsignaturesapp[[name]]$adjusted_pvalue = formatC(agingsignaturesapp[[name]]$adj_pval, format = "e", digits = 2)
+  agingsignaturesapp[[name]]$pvalue = agingsignaturesapp[[name]]$pval
+  agingsignaturesapp[[name]]$adjusted_pvalue = agingsignaturesapp[[name]]$adj_pval
   agingsignaturesapp[[name]]$entrez = paste0('<a href="https://www.ncbi.nlm.nih.gov/gene/?term=', agingsignaturesapp[[name]]$entrez, '">', agingsignaturesapp[[name]]$entrez, '</a>')
 }
 
@@ -98,223 +105,78 @@ ui <- fluidPage(
                     of the expression changes between the signatures.", style="font-size:15px;"),
             tags$p("The manual page contains all the information needed to understand and work with the contents of this website.", style="font-size:15px;")
     ),
-    navbarMenu("Signatures of tissues",
-               tabPanel("Brain",
-                        
+    tabPanel("Signature comparison",
+             
                         sidebarLayout(
                           sidebarPanel(
-                            sliderInput(inputId = "brain_presence",
-                                        label = "In how many signatures the genes must be present?",
-                                        min = 1,
-                                        max = 7,
-                                        value = 1
-                            ),
-                            numericInput(inputId = "brain_pval_thres",
+                            selectInput(inputId = "main_signature",
+                                        label = "Main signature to be displayed:",
+                                        choices = c("Brain" = "Brain",
+                                                    "Muscle" = "Muscle",
+                                                    "Liver" = "Liver",
+                                                    "Human" = "Human",
+                                                    "Mouse" = "Mouse",
+                                                    "Rat" = "Rat",
+                                                    "Compound" = "All"
+                                        ),
+                                        selected = "Brain"),
+                            numericInput(inputId = "pval_thres",
                                          label = "Threshold for adjusted pvalue:",
                                          value = 1,
                                          max = 1,
                                          min = 0,
                                          step = 0.01),
-                            selectInput(inputId = "brain_sortby",
-                                        label = "Sort by:",
-                                        choices = c("LogFC (ascending)" = "logFC_a",
-                                                    "LogFC (descending)" = "logFC_d",
-                                                    "Adjusted p-value" = "adj_pval"
-                                                    ),
-                                        selected = "adj_pval")
+                            sliderInput(inputId = "presence",
+                                        label = "In how many signatures the genes must be present?",
+                                        min = 1,
+                                        max = 7,
+                                        value = 1
+                            ),
+                            numericInput(inputId = "pval_soft_thres",
+                                         label = "P-value threshold for highlighting moderately significant genes:",
+                                         value = 0.05,
+                                         max = 1,
+                                         min = 0,
+                                         step = 0.01),
+                            numericInput(inputId = "pval_hard_thres",
+                                         label = "P-value threshold for highlighting very significant genes:",
+                                         value = 0.001,
+                                         max = 1,
+                                         min = 0,
+                                         step = 0.01),
+                            selectInput(inputId = "upregulated_in",
+                                        label = "Genes shown must be upregulated in:",
+                                        choices = c("Brain" = "Brain",
+                                                    "Muscle" = "Muscle",
+                                                    "Liver" = "Liver",
+                                                    "Human" = "Human",
+                                                    "Mouse" = "Mouse",
+                                                    "Rat" = "Rat",
+                                                    "Compound" = "All"
+                                        ),
+                                        multiple = TRUE),
+                            selectInput(inputId = "downregulated_in",
+                                        label = "Genes shown must be downregulated in:",
+                                        choices = c("Brain" = "Brain",
+                                                    "Muscle" = "Muscle",
+                                                    "Liver" = "Liver",
+                                                    "Human" = "Human",
+                                                    "Mouse" = "Mouse",
+                                                    "Rat" = "Rat",
+                                                    "Compound" = "All"
+                                        ),
+                                        multiple = TRUE)
+                                        
                             
                           ),
                         
                           mainPanel(
-                            DT::dataTableOutput("brain_maintable")
+                            DT::dataTableOutput("main_table")
+                            #textOutput("kek")
                           )
                         )
                ),
               
-               tabPanel("Muscle",
-                        sidebarLayout(
-                          sidebarPanel(
-                            sliderInput(inputId = "muscle_presence",
-                                        label = "In how many signatures the genes must be present?",
-                                        min = 1,
-                                        max = 7,
-                                        value = 1
-                            ),
-                            numericInput(inputId = "muscle_pval_thres",
-                                         label = "Threshold for adjusted pvalue:",
-                                         value = 1,
-                                         max = 1,
-                                         min = 0,
-                                         step = 0.01),
-                            selectInput(inputId = "muscle_sortby",
-                                        label = "Sort by:",
-                                        choices = c("LogFC (ascending)" = "logFC_a",
-                                                    "LogFC (descending)" = "logFC_d",
-                                                    "Adjusted p-value" = "adj_pval"
-                                        ),
-                                        selected = "adj_pval")
-                            
-                          ),
-                          
-                          mainPanel(
-                            DT::dataTableOutput("muscle_maintable")
-                          )
-                        )
-               ),
-               tabPanel("Liver",
-                        sidebarLayout(
-                          sidebarPanel(
-                            sliderInput(inputId = "liver_presence",
-                                        label = "In how many signatures the genes must be present?",
-                                        min = 1,
-                                        max = 7,
-                                        value = 1
-                            ),
-                            numericInput(inputId = "liver_pval_thres",
-                                         label = "Threshold for adjusted pvalue:",
-                                         value = 1,
-                                         max = 1,
-                                         min = 0,
-                                         step = 0.01),
-                            selectInput(inputId = "liver_sortby",
-                                        label = "Sort by:",
-                                        choices = c("LogFC (ascending)" = "logFC_a",
-                                                    "LogFC (descending)" = "logFC_d",
-                                                    "Adjusted p-value" = "adj_pval"
-                                        ),
-                                        selected = "adj_pval")
-                            
-                          ),
-                          
-                          mainPanel(
-                            DT::dataTableOutput("liver_maintable")
-                          )
-                        )
-               )
-    ),
-    navbarMenu(
-      "Signatures of species",
-      tabPanel("Mouse",
-               sidebarLayout(
-                 sidebarPanel(
-                   sliderInput(inputId = "mouse_presence",
-                               label = "In how many signatures the genes must be present?",
-                               min = 1,
-                               max = 7,
-                               value = 1
-                   ),
-                   numericInput(inputId = "mouse_pval_thres",
-                                label = "Threshold for adjusted pvalue:",
-                                value = 1,
-                                max = 1,
-                                min = 0,
-                                step = 0.01),
-                   selectInput(inputId = "mouse_sortby",
-                               label = "Sort by:",
-                               choices = c("LogFC (ascending)" = "logFC_a",
-                                           "LogFC (descending)" = "logFC_d",
-                                           "Adjusted p-value" = "adj_pval"
-                               ),
-                               selected = "adj_pval")
-                   
-                 ),
-                 
-                 mainPanel(
-                   DT::dataTableOutput("mouse_maintable")
-                 )
-               )
-      ),
-      tabPanel("Human",
-               sidebarLayout(
-                 sidebarPanel(
-                   sliderInput(inputId = "human_presence",
-                               label = "In how many signatures the genes must be present?",
-                               min = 1,
-                               max = 7,
-                               value = 1
-                   ),
-                   numericInput(inputId = "human_pval_thres",
-                                label = "Threshold for adjusted pvalue:",
-                                value = 1,
-                                max = 1,
-                                min = 0,
-                                step = 0.01),
-                   selectInput(inputId = "human_sortby",
-                               label = "Sort by:",
-                               choices = c("LogFC (ascending)" = "logFC_a",
-                                           "LogFC (descending)" = "logFC_d",
-                                           "Adjusted p-value" = "adj_pval"
-                               ),
-                               selected = "adj_pval")
-                   
-                 ),
-                 
-                 mainPanel(
-                   DT::dataTableOutput("human_maintable")
-                 )
-               )
-      ),
-      tabPanel("Rat",
-               sidebarLayout(
-                 sidebarPanel(
-                   sliderInput(inputId = "rat_presence",
-                               label = "In how many signatures the genes must be present?",
-                               min = 1,
-                               max = 7,
-                               value = 1
-                   ),
-                   numericInput(inputId = "rat_pval_thres",
-                                label = "Threshold for adjusted pvalue:",
-                                value = 1,
-                                max = 1,
-                                min = 0,
-                                step = 0.01),
-                   selectInput(inputId = "rat_sortby",
-                               label = "Sort by:",
-                               choices = c("LogFC (ascending)" = "logFC_a",
-                                           "LogFC (descending)" = "logFC_d",
-                                           "Adjusted p-value" = "adj_pval"
-                               ),
-                               selected = "adj_pval")
-                   
-                 ),
-                 
-                 mainPanel(
-                   DT::dataTableOutput("rat_maintable")
-                 )
-               )
-      )
-    ),
-    tabPanel("Compound signature",
-             sidebarLayout(
-               sidebarPanel(
-                 sliderInput(inputId = "compound_presence",
-                             label = "In how many signatures the genes must be present?",
-                             min = 1,
-                             max = 7,
-                             value = 1
-                 ),
-                 numericInput(inputId = "compound_pval_thres",
-                              label = "Threshold for adjusted pvalue:",
-                              value = 1,
-                              max = 1,
-                              min = 0,
-                              step = 0.01),
-                 selectInput(inputId = "compound_sortby",
-                             label = "Sort by:",
-                             choices = c("LogFC (ascending)" = "logFC_a",
-                                         "LogFC (descending)" = "logFC_d",
-                                         "Adjusted p-value" = "adj_pval"
-                             ),
-                             selected = "adj_pval")
-                 
-               ),
-               
-               mainPanel(
-                 DT::dataTableOutput("compound_maintable")
-               )
-             )
-    ),
     tabPanel("Downloads",
              tags$h2("Data for downloading"),
              tags$p("To download the table with the quantitative differential expression data, click the button below:", style="font-size:15px;"),
@@ -345,9 +207,16 @@ ui <- fluidPage(
           "Comparative signature interface",
           tags$h2("Comparative signature interface"),
           DT::dataTableOutput("demo_table"),
-            tags$p("Comparative signature interface can be found in each of the signature tabs. Its main purpose is to show 
-                   how conservative the change of each gene is across signatures. The green arrows represent that the gene is upregulated with age, and red arrows represent the downregulation of the gene. 
-                   The numbers next to the arrows are the corresponding logFCs rounded to 2 decimal places (so 0 can actually be a very small up- or downregulation).", style="font-size:15px;")
+            tags$p("Comparative signature interface can be found in the \"Signature comparison\" tab. Its main purpose is to show 
+                   what genes are differentially expressed with age and how conservative the change of each gene is across signatures. The first columns that the user sees 
+                   represent the differential expression of genes in the chosen signature (first selection menu at the left of the page). A gene's Entrez ID (clickable, is a link to NCBI for a specific gene), gene symbol, quantitative differential 
+                   expression metric (logFC), it's significance before and after BH adjustment (pvalue and adjusted_pvalue) is what can be found for each gene in a selected signature.", style="font-size:15px;"),
+          tags$p("One can filter out all the genes having less significance in the chosen signature than a threshold with the \"threshold for adjusted pvalue\" input. By default, all genes from the signature are shown. 
+                 The presence filter is handy for filtering out the genes which are not present in a lot of signatures.", style="font-size:15px;"),
+          tags$p("Now for the comparative part of the table. The green arrows represent that the gene is upregulated with age, and red arrows represent the downregulation of the gene. 
+                   The numbers next to the arrows are the corresponding logFCs rounded to 2 decimal places (so 0 can actually be a very small up- or downregulation). Here, some cells are highlighted with green or red background. These cells correspond to a gene having a statistically significant up- or downregulation, respectively, in the corresponding signature. 
+                 The user can specify two thresholds for adjusted p-value: the soft one for moderately significant genes (default is 0.05) and the hard one for very significant genes (default is 0.001). The genes that are more significant than the soft threshold 
+                 will have lightly colored background, and those which are more significant than the hard threshold will have a brighter colored background.", style="font-size:15px;")
         ),
         tabPanel(
           "Download data",
@@ -378,11 +247,6 @@ server = function(input, output) {
     }
   )
   
-  demo_table = (agingsignaturesapp[["Brain"]] %>% filter(presence_total >= 5) %>% arrange(adj_pval))[1:2, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")]
-  
-  output$demo_table = DT::renderDataTable(
-    demo_table, escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=F)
-  )
   
   js <- c(
     "function(row, data, displayNum, index){",
@@ -413,118 +277,30 @@ server = function(input, output) {
     "}"
   )
   
-  brain_table = reactive({temp = agingsignaturesapp[["Brain"]] %>% filter(presence_total >= input$brain_presence) %>% filter(adj_pval < input$brain_pval_thres) %>% arrange(adj_pval)
-                  if (input$brain_sortby == "adj_pval"){
-                    temp = temp %>% arrange(adj_pval)
-                  } else if (input$brain_sortby == "logFC_a"){
-                    temp = temp %>% arrange(logFC)
-                  } else if (input$brain_sortby == "logFC_d"){
-                    temp = temp %>% arrange(desc(logFC))
-                  }
-                  return(temp[, c("entrez", "genesymbol", "logFC", "pval", "adj_pval", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
+  brks = reactive(c(-1*input$pval_soft_thres, -1*input$pval_hard_thres, 0, input$pval_hard_thres, input$pval_soft_thres))
+  clrs = c("rgb(255,255,255)", "rgb(255,240,240)", "rgb(255,200,200)", "rgb(200,255,200)", "rgb(240,255,240)", "rgb(255,255,255)")
+  # clrs <- round(seq(100, 255, length.out = length(brks) + 1), 0) %>%
+  #   {paste0("rgb(255,", ., ",", ., ")")}
+  
+  demo_table = (agingsignaturesapp[["Brain"]] %>% filter(presence_total >= 5) %>% arrange(adj_pval))[1:2, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")]
+  
+  output$demo_table = DT::renderDataTable(
+    DT::datatable(demo_table, filter="top", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c(13:19))), rowCallback = JS(js))) %>%
+      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs))
+  )
+  
+  main_table = reactive({temp = agingsignaturesapp[[input$main_signature]] %>% filter(presence_total >= input$presence) %>% filter(adj_pval < input$pval_thres) %>% arrange(adj_pval)
+                  return(temp[, c("genesymbol", "entrez", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")])
   })
   
   
-  output$brain_maintable = DT::renderDataTable(
-    brain_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=T, rowCallback = JS(js))
+  #output$kek = reactive(length(colnames(main_table())))
+  output$main_table = DT::renderDataTable(
+    DT::datatable(main_table(), filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c((length(colnames(main_table()))-6):(length(colnames(main_table())))))), rowCallback = JS(js), fixedColumns = list(leftColumns = 2))) %>% 
+      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs)) %>%
+      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), backgroundColor = styleEqual(c(NA), c("white"))) %>%
+      formatStyle(c(0:1), 'border-right' = 'solid 1.75px')
   )
-  
-  muscle_table = reactive({temp = agingsignaturesapp[["Muscle"]] %>% filter(presence_total >= input$muscle_presence) %>% filter(adj_pval < input$muscle_pval_thres) %>% arrange(adj_pval)
-  if (input$muscle_sortby == "adj_pval"){
-    temp = temp %>% arrange(adj_pval)
-  } else if (input$muscle_sortby == "logFC_a"){
-    temp = temp %>% arrange(logFC)
-  } else if (input$muscle_sortby == "logFC_d"){
-    temp = temp %>% arrange(desc(logFC))
-  }
-  return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
-  })
-  
-  
-  output$muscle_maintable = DT::renderDataTable(
-    muscle_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
-  )
-  
-  liver_table = reactive({temp = agingsignaturesapp[["Liver"]] %>% filter(presence_total >= input$liver_presence) %>% filter(adj_pval < input$liver_pval_thres) %>% arrange(adj_pval)
-  if (input$liver_sortby == "adj_pval"){
-    temp = temp %>% arrange(adj_pval)
-  } else if (input$liver_sortby == "logFC_a"){
-    temp = temp %>% arrange(logFC)
-  } else if (input$liver_sortby == "logFC_d"){
-    temp = temp %>% arrange(desc(logFC))
-  }
-  return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
-  })
-  
-  
-  output$liver_maintable = DT::renderDataTable(
-    liver_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
-  )
-  
-  mouse_table = reactive({temp = agingsignaturesapp[["Mouse"]] %>% filter(presence_total >= input$mouse_presence) %>% filter(adj_pval < input$mouse_pval_thres) %>% arrange(adj_pval)
-  if (input$mouse_sortby == "adj_pval"){
-    temp = temp %>% arrange(adj_pval)
-  } else if (input$mouse_sortby == "logFC_a"){
-    temp = temp %>% arrange(logFC)
-  } else if (input$mouse_sortby == "logFC_d"){
-    temp = temp %>% arrange(desc(logFC))
-  }
-  return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
-  })
-  
-  
-  output$mouse_maintable = DT::renderDataTable(
-    mouse_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
-  )
-  
-  human_table = reactive({temp = agingsignaturesapp[["Human"]] %>% filter(presence_total >= input$human_presence) %>% filter(adj_pval < input$human_pval_thres) %>% arrange(adj_pval)
-  if (input$human_sortby == "adj_pval"){
-    temp = temp %>% arrange(adj_pval)
-  } else if (input$human_sortby == "logFC_a"){
-    temp = temp %>% arrange(logFC)
-  } else if (input$human_sortby == "logFC_d"){
-    temp = temp %>% arrange(desc(logFC))
-  }
-  return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
-  })
-  
-  
-  output$human_maintable = DT::renderDataTable(
-    human_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
-  )
-  
-  rat_table = reactive({temp = agingsignaturesapp[["Rat"]] %>% filter(presence_total >= input$rat_presence) %>% filter(adj_pval < input$rat_pval_thres) %>% arrange(adj_pval)
-  if (input$rat_sortby == "adj_pval"){
-    temp = temp %>% arrange(adj_pval)
-  } else if (input$rat_sortby == "logFC_a"){
-    temp = temp %>% arrange(logFC)
-  } else if (input$rat_sortby == "logFC_d"){
-    temp = temp %>% arrange(desc(logFC))
-  }
-  return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
-  })
-  
-  
-  output$rat_maintable = DT::renderDataTable(
-    rat_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
-  )
-  
-  compound_table = reactive({temp = agingsignaturesapp[["All"]] %>% filter(presence_total >= input$compound_presence) %>% filter(adj_pval < input$compound_pval_thres) %>% arrange(adj_pval)
-  if (input$compound_sortby == "adj_pval"){
-    temp = temp %>% arrange(adj_pval)
-  } else if (input$compound_sortby == "logFC_a"){
-    temp = temp %>% arrange(logFC)
-  } else if (input$compound_sortby == "logFC_d"){
-    temp = temp %>% arrange(desc(logFC))
-  }
-  return(temp[, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
-  })
-  
-  
-  output$compound_maintable = DT::renderDataTable(
-    compound_table(), escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=F)
-  )
-  
   
 }
 
