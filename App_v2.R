@@ -216,7 +216,8 @@ ui <- fluidPage(
           tags$p("Now for the comparative part of the table. The green arrows represent that the gene is upregulated with age, and red arrows represent the downregulation of the gene. 
                    The numbers next to the arrows are the corresponding logFCs rounded to 2 decimal places (so 0 can actually be a very small up- or downregulation). Here, some cells are highlighted with green or red background. These cells correspond to a gene having a statistically significant up- or downregulation, respectively, in the corresponding signature. 
                  The user can specify two thresholds for adjusted p-value: the soft one for moderately significant genes (default is 0.05) and the hard one for very significant genes (default is 0.001). The genes that are more significant than the soft threshold 
-                 will have lightly colored background, and those which are more significant than the hard threshold will have a brighter colored background.", style="font-size:15px;")
+                 will have lightly colored background, and those which are more significant than the hard threshold will have a brighter colored background. One can also filter genes upregulated or downregulated in a set of signatures (selection menus at the bottom-left). 
+                 These selection menus do not take into account significance, they only filter by logFC values. If several signatures are selected in them, only the intersection is displayed (genes satisfying all of the conditions).", style="font-size:15px;")
         ),
         tabPanel(
           "Download data",
@@ -282,14 +283,29 @@ server = function(input, output) {
   # clrs <- round(seq(100, 255, length.out = length(brks) + 1), 0) %>%
   #   {paste0("rgb(255,", ., ",", ., ")")}
   
-  demo_table = (agingsignaturesapp[["Brain"]] %>% filter(presence_total >= 5) %>% arrange(adj_pval))[1:2, c("entrez", "genesymbol", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")]
+  demo_table = (agingsignaturesapp[["Brain"]] %>% filter(presence_total >= 5) %>% arrange(adj_pval))[1:2, c("genesymbol", "entrez", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")]
   
   output$demo_table = DT::renderDataTable(
-    DT::datatable(demo_table, filter="top", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c(13:19))), rowCallback = JS(js))) %>%
-      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs))
+    DT::datatable(demo_table, filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c(13:19))), rowCallback = JS(js), fixedColumns = list(leftColumns = 2))) %>%
+      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs)) %>%
+      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), backgroundColor = styleEqual(c(NA), c("white"))) %>%
+      formatStyle(c(0:1), 'border-right' = 'solid 1.75px')
   )
   
   main_table = reactive({temp = agingsignaturesapp[[input$main_signature]] %>% filter(presence_total >= input$presence) %>% filter(adj_pval < input$pval_thres) %>% arrange(adj_pval)
+                  
+                  if (length(input$upregulated_in > 0)){
+                    upregcols = paste0(input$upregulated_in, "_logFC")
+                    for (i in 1:length(upregcols)){
+                      temp = temp %>% filter(!!as.symbol(upregcols[i]) > 0)
+                    }
+                  }
+                  if (length(input$downregulated_in > 0)){
+                    downregcols = paste0(input$downregulated_in, "_logFC")
+                    for (i in 1:length(downregcols)){
+                      temp = temp %>% filter(!!as.symbol(downregcols[i]) < 0)
+                    }
+                  }
                   return(temp[, c("genesymbol", "entrez", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")])
   })
   
