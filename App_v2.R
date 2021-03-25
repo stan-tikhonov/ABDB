@@ -4,6 +4,7 @@ library(org.Mm.eg.db)
 library(annotate)
 library(DT)
 library(magrittr)
+library(shinyWidgets)
 
 # load the signature list
 load("agingsignatures_v4.RData")
@@ -152,7 +153,7 @@ ui <- fluidPage(
                                         max = 7,
                                         value = 0
                             ),
-                            selectInput(inputId = "upregulated_in",
+                            pickerInput(inputId = "upregulated_in",
                                         label = "Genes shown must be upregulated in:",
                                         choices = c("Brain" = "Brain",
                                                     "Muscle" = "Muscle",
@@ -162,8 +163,11 @@ ui <- fluidPage(
                                                     "Rat" = "Rat",
                                                     "Compound" = "All"
                                         ),
-                                        multiple = TRUE),
-                            selectInput(inputId = "downregulated_in",
+                                        options = list(
+                                          "actions-box" = TRUE
+                                        ),
+                                        multiple=TRUE),
+                            pickerInput(inputId = "downregulated_in",
                                         label = "Genes shown must be downregulated in:",
                                         choices = c("Brain" = "Brain",
                                                     "Muscle" = "Muscle",
@@ -173,7 +177,10 @@ ui <- fluidPage(
                                                     "Rat" = "Rat",
                                                     "Compound" = "All"
                                         ),
-                                        multiple = TRUE)
+                                        options = list(
+                                          "actions-box" = TRUE
+                                        ),
+                                        multiple=TRUE)
                                         
                             
                           ),
