@@ -72,6 +72,7 @@ agingsignaturesapp <- agingsignatures_v3
 signfactor = sign(maintable[,c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])
 signfactor[signfactor == 0] = 1
 signfactor[is.na(maintable[,c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC")])] = NA
+maintable[,c("Brain_adj_pval_unsign", "Muscle_adj_pval_unsign", "Liver_adj_pval_unsign", "Mouse_adj_pval_unsign", "Human_adj_pval_unsign", "Rat_adj_pval_unsign", "All_adj_pval_unsign")] = maintable[,c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")]
 maintable[,c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")] = maintable[,c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")] * signfactor
 
 for (name in names(agingsignaturesapp)){
@@ -83,6 +84,7 @@ for (name in names(agingsignaturesapp)){
   
   agingsignaturesapp[[name]] = left_join(agingsignaturesapp[[name]], maintable[,c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "entrez")], by = c("entrez"))
   agingsignaturesapp[[name]] = left_join(agingsignaturesapp[[name]], maintable[,c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval", "entrez")], by = c("entrez"))
+  agingsignaturesapp[[name]] = left_join(agingsignaturesapp[[name]], maintable[,c("Brain_adj_pval_unsign", "Muscle_adj_pval_unsign", "Liver_adj_pval_unsign", "Mouse_adj_pval_unsign", "Human_adj_pval_unsign", "Rat_adj_pval_unsign", "All_adj_pval_unsign", "entrez")], by = c("entrez"))
   
   agingsignaturesapp[[name]]$logFC = round(agingsignaturesapp[[name]]$logFC, digits = 2)
   agingsignaturesapp[[name]]$pvalue = agingsignaturesapp[[name]]$pval
@@ -144,6 +146,12 @@ ui <- fluidPage(
                                          max = 1,
                                          min = 0,
                                          step = 0.01),
+                            sliderInput(inputId = "num_signif",
+                                        label = "In how many signatures the genes must be significant (soft threshold)?",
+                                        min = 0,
+                                        max = 7,
+                                        value = 0
+                            ),
                             selectInput(inputId = "upregulated_in",
                                         label = "Genes shown must be upregulated in:",
                                         choices = c("Brain" = "Brain",
@@ -293,7 +301,8 @@ server = function(input, output) {
   )
   
   main_table = reactive({temp = agingsignaturesapp[[input$main_signature]] %>% filter(presence_total >= input$presence) %>% filter(adj_pval < input$pval_thres) %>% arrange(adj_pval)
-                  
+                  temp$signif_total = rowSums((temp[, grepl("^(Mouse|Rat|Human|All|Brain|Muscle|Liver)_adj_pval$", colnames(temp))] < input$pval_soft_thres) & (temp[, grepl("^(Mouse|Rat|Human|All|Brain|Muscle|Liver)_adj_pval$", colnames(temp))] > -1*input$pval_soft_thres))
+                  temp = temp %>% filter(signif_total >= input$num_signif)
                   if (length(input$upregulated_in > 0)){
                     upregcols = paste0(input$upregulated_in, "_logFC")
                     for (i in 1:length(upregcols)){
