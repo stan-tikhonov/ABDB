@@ -224,14 +224,14 @@ ui <- fluidPage(
           DT::dataTableOutput("demo_table"),
             tags$p("Comparative signature interface can be found in the \"Signature comparison\" tab. Its main purpose is to show 
                    what genes are differentially expressed with age and how conservative the change of each gene is across signatures. The first columns that the user sees 
-                   represent the differential expression of genes in the chosen signature (first selection menu at the left of the page). A gene's Entrez ID (clickable, is a link to NCBI for a specific gene), gene symbol, quantitative differential 
+                   represent the differential expression of genes in the chosen signature (first selection menu at the left of the page). A gene's Entrez ID (clickable, is a link to NCBI for a specific gene), gene symbol (both Entrez ID and gene symbol are for mouse orthologs in all signatures), quantitative differential 
                    expression metric (logFC), it's significance before and after BH adjustment (pvalue and adjusted_pvalue) is what can be found for each gene in a selected signature.", style="font-size:15px;"),
           tags$p("One can filter out all the genes having less significance in the chosen signature than a threshold with the \"threshold for adjusted pvalue\" input. By default, all genes from the signature are shown. 
                  The presence filter is handy for filtering out the genes which are not present in a lot of signatures.", style="font-size:15px;"),
           tags$p("Now for the comparative part of the table. The green arrows represent that the gene is upregulated with age, and red arrows represent the downregulation of the gene. 
                    The numbers next to the arrows are the corresponding logFCs rounded to 2 decimal places (so 0 can actually be a very small up- or downregulation). Here, some cells are highlighted with green or red background. These cells correspond to a gene having a statistically significant up- or downregulation, respectively, in the corresponding signature. 
                  The user can specify two thresholds for adjusted p-value: the soft one for moderately significant genes (default is 0.05) and the hard one for very significant genes (default is 0.001). The genes that are more significant than the soft threshold 
-                 will have lightly colored background, and those which are more significant than the hard threshold will have a brighter colored background. One can also filter genes upregulated or downregulated in a set of signatures (selection menus at the bottom-left). 
+                 will have lightly colored background, and those which are more significant than the hard threshold will have a brighter colored background. The genes can be filtered so that they satisfy the soft threshold in at least N signatures with a slider. One can also filter genes upregulated or downregulated in a set of signatures (selection menus at the bottom-left). 
                  These selection menus do not take into account significance, they only filter by logFC values. If several signatures are selected in them, only the intersection is displayed (genes satisfying all of the conditions).", style="font-size:15px;")
         ),
         tabPanel(
