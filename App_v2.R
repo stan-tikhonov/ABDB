@@ -293,8 +293,20 @@ server = function(input, output) {
     "}"
   )
   
-  brks = reactive(c(-1*input$pval_soft_thres, -1*input$pval_hard_thres, 0, input$pval_hard_thres, input$pval_soft_thres))
-  clrs = c("rgb(255,255,255)", "rgb(255,240,240)", "rgb(255,200,200)", "rgb(200,255,200)", "rgb(240,255,240)", "rgb(255,255,255)")
+  brks = reactive(
+    if (input$pval_hard_thres < input$pval_soft_thres){
+      return(c(-1*input$pval_soft_thres, -1*input$pval_hard_thres, 0, input$pval_hard_thres, input$pval_soft_thres))
+    } else {
+      return(c(-1*input$pval_soft_thres, 0, input$pval_soft_thres))
+    }
+    )
+  clrs = reactive(
+    if (input$pval_hard_thres < input$pval_soft_thres){
+      return(c("rgb(255,255,255)", "rgb(255,240,240)", "rgb(255,200,200)", "rgb(200,255,200)", "rgb(240,255,240)", "rgb(255,255,255)"))
+    } else {
+      return(c("rgb(255,255,255)", "rgb(255,240,240)", "rgb(240,255,240)", "rgb(255,255,255)"))
+    }
+  )
   # clrs <- round(seq(100, 255, length.out = length(brks) + 1), 0) %>%
   #   {paste0("rgb(255,", ., ",", ., ")")}
   
@@ -302,7 +314,7 @@ server = function(input, output) {
   
   output$demo_table = DT::renderDataTable(
     DT::datatable(demo_table, filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c(13:19))), rowCallback = JS(js), fixedColumns = list(leftColumns = 2))) %>%
-      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs)) %>%
+      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs())) %>%
       formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), backgroundColor = styleEqual(c(NA), c("white"))) %>%
       formatStyle(c(0:1), 'border-right' = 'solid 1.75px')
   )
@@ -329,7 +341,7 @@ server = function(input, output) {
   #output$kek = reactive(length(colnames(main_table())))
   output$main_table = DT::renderDataTable(
     DT::datatable(main_table(), filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c((length(colnames(main_table()))-6):(length(colnames(main_table())))))), rowCallback = JS(js), fixedColumns = list(leftColumns = 2))) %>% 
-      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs)) %>%
+      formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs())) %>%
       formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), backgroundColor = styleEqual(c(NA), c("white"))) %>%
       formatStyle(c(0:1), 'border-right' = 'solid 1.75px')
   )
