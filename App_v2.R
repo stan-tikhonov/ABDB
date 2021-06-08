@@ -5,9 +5,54 @@ library(annotate)
 library(DT)
 library(magrittr)
 library(shinyWidgets)
+library(plotly)
+library(shinycssloaders)
+
+# prepare stuff for metafor plots
+
+load("logFCmatrixregr.RData")
+load("SEmatrixregr.RData")
+load("sourcedata.RData")
+load("deminglist2.RData")
+
+chosencols = list()
+chosencols[["Human"]] = colnames(logFCmatrixregr)[grepl(".*Human.*", colnames(logFCmatrixregr))]
+chosencols[["Rat"]] = colnames(logFCmatrixregr)[grepl(".*Rat.*", colnames(logFCmatrixregr))]
+chosencols[["Mouse"]] = colnames(logFCmatrixregr)[grepl(".*Mouse.*", colnames(logFCmatrixregr))]
+chosencols[["Brain"]] = colnames(logFCmatrixregr)[grepl(".*Brain.*", colnames(logFCmatrixregr)) | grepl(".*Frontalcortex.*", colnames(logFCmatrixregr)) | grepl(".*Cerebellum.*", colnames(logFCmatrixregr))]
+chosencols[["Muscle"]] = colnames(logFCmatrixregr)[grepl(".*Muscle.*", colnames(logFCmatrixregr))]
+chosencols[["Liver"]] = colnames(logFCmatrixregr)[grepl(".*Liver.*", colnames(logFCmatrixregr))]
+chosencols[["All"]] = colnames(logFCmatrixregr)
+
+strain_map = read.csv("all_aging_data_mod.csv", sep = ";", header = TRUE)
+strain_map$GEOID = as.character(strain_map$GEOID)
+strain_map$Strain = as.character(strain_map$Strain)
+strain_map[which(strain_map$Strain == ""),"Strain"] = "NA"
+colnames(strain_map) = c("source", "strain")
+strain_map = strain_map %>% distinct(source, .keep_all = TRUE)
+
+# define functions for metafor plots
+
+hline <- function(y = 0, color = "red") {
+  list(
+    type = "line", 
+    x0 = 0, 
+    x1 = 1, 
+    xref = "paper",
+    y0 = y, 
+    y1 = y, 
+    line = list(color = color),
+    name="Mixed effect model mean"
+  )
+}
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
 
 # load the signature list
-load("agingsignatures_v4.RData")
+load("agingsignatures_v4_ABDB.RData")
 agingsignatures <- agingsignatures_v3
 cols = c()
 # aggregate data
@@ -21,6 +66,9 @@ maintable = agingsignatures[["Brain"]][,c("Brain_logFC", "Brain_pval", "Brain_ad
 for (name in names(agingsignatures)[-1]){
   maintable = full_join(maintable, agingsignatures[[name]][, c(paste0(name, c("_logFC", "_pval", "_adj_pval")), "entrez")])
 }
+
+symbols = getSYMBOL(maintable$entrez, data = "org.Mm.eg.db")
+maintable$genesymbol = symbols[maintable$entrez]
 
 maintable$presence_tissues = rowSums(!is.na(maintable[, grepl("^(Brain|Liver|Muscle)_logFC$", colnames(maintable))]))
 maintable$presence_species = rowSums(!is.na(maintable[, grepl("^(Mouse|Rat|Human)_logFC$", colnames(maintable))]))
@@ -93,8 +141,20 @@ for (name in names(agingsignaturesapp)){
   agingsignaturesapp[[name]]$entrez = paste0('<a href="https://www.ncbi.nlm.nih.gov/gene/?term=', agingsignaturesapp[[name]]$entrez, '">', agingsignaturesapp[[name]]$entrez, '</a>')
 }
 
+metafor_genes = list()
+for (name in names(agingsignaturesapp)){
+  metafor_genes[[name]] = gsub("(<[^<>]+>)", "", agingsignaturesapp[[name]]$entrez)
+  names(metafor_genes[[name]]) = agingsignaturesapp[[name]]$genesymbol
+  
+}
+
 
 ui <- fluidPage(
+  tags$script("
+    Shiny.addCustomMessageHandler('metafor_gene_send', function(value) {
+    Shiny.setInputValue('metafor_gene', value);
+    });
+  "),
   navbarPage("ABDB",
     tabPanel("Home",
             tags$h1("Aging Biomarker Database"),
@@ -191,6 +251,65 @@ ui <- fluidPage(
                           )
                         )
                ),
+    
+    tabPanel("Gene plot",
+             
+             sidebarLayout(
+               sidebarPanel(
+                 selectInput(inputId = "metafor_signature",
+                             label = "Signature to build a plot:",
+                             choices = c("Brain" = "Brain",
+                                         "Muscle" = "Muscle",
+                                         "Liver" = "Liver",
+                                         "Human" = "Human",
+                                         "Mouse" = "Mouse",
+                                         "Rat" = "Rat",
+                                         "Compound" = "All"
+                             ),
+                             selected = "Brain"),
+                 # multiInput(
+                 #   inputId = "metafor_gene",
+                 #   label = "Choose a gene:", 
+                 #   choices = NULL,
+                 #   options = list('limit' = 1),
+                 #   choiceNames = as.character(maintable$genesymbol),
+                 #   choiceValues = as.character(maintable$entrez)
+                 # ),
+                 
+                 selectizeInput(
+                   inputId = "metafor_gene",
+                   label = "Choose a gene:", 
+                   choices = NULL,
+                   selected = NULL,
+                   options = list(placeholder = "Type in gene symbol",
+                                  onInitialize = I('function() { this.setValue(""); }'))
+                 ),
+                 
+                 selectInput(inputId = "metafor_color",
+                             label = "Color by:",
+                             choices = c("Species" = "species",
+                                         "Tissue" = "tissue",
+                                         "Study" = "source",
+                                         "Sex" = "sex"
+                             ),
+                             selected = "tissue"),
+                 
+                 selectInput(inputId = "metafor_shape",
+                             label = "Shape by:",
+                             choices = c("Species" = "species",
+                                         "Sex" = "sex"
+                             ),
+                             selected = "species")
+                 
+               ),
+               mainPanel(
+                 withSpinner(
+                  plotlyOutput(outputId = "metafor_plot")
+                 )
+               )
+             )
+             
+          ),
               
     tabPanel("Downloads",
              tags$h2("Data for downloading"),
@@ -232,8 +351,22 @@ ui <- fluidPage(
                    The numbers next to the arrows are the corresponding logFCs rounded to 2 decimal places (so 0 can actually be a very small up- or downregulation). Here, some cells are highlighted with green or red background. These cells correspond to a gene having a statistically significant up- or downregulation, respectively, in the corresponding signature. 
                  The user can specify two thresholds for adjusted p-value: the soft one for moderately significant genes (default is 0.05) and the hard one for very significant genes (default is 0.001). The genes that are more significant than the soft threshold 
                  will have lightly colored background, and those which are more significant than the hard threshold will have a brighter colored background. The genes can be filtered so that they satisfy the soft threshold in at least N signatures with a slider. One can also filter genes upregulated or downregulated in a set of signatures (selection menus at the bottom-left). 
-                 These selection menus do not take into account significance, they only filter by logFC values. If several signatures are selected in them, only the intersection is displayed (genes satisfying all of the conditions).", style="font-size:15px;")
+                 These selection menus do not take into account significance, they only filter by logFC values. If several signatures are selected in them, only the intersection is displayed (genes satisfying all of the conditions).", style="font-size:15px;"),
+          tags$p("Each cell in the right (\"comparative\") part of the table is clickable and will direct the user to the mixed effects model plot of the corresponding gene (table row) in the corresponding signature (table column). 
+                 One can find more information on such plots in the \"Gene plots\" tab of the manual.", style="font-size:15px;")
         ),
+        tabPanel(
+          "Gene plots",
+          tags$h2("Mixed effects model plot"),
+          withSpinner(
+            plotlyOutput(outputId = "metafor_demo")
+          ),
+          tags$p("The \"Gene plot\" tab contains plots of mixed effects models for genes within signatures. The horizontal red line on the plot is the mixed effects model mean logFC for the chosen gene in the chosen signature 
+                 (the number displayed in the signature comparison table). Each point of the scatter plot represents mean logFC from a specific dataset from the signature in which the gene was present, with error bars showing the standard error for this dataset. The gene and signature 
+                 for the plot can be chosen manually in the menus at the left of the table, or they will be set automatically when the user clicks on a cell in the right part of the 
+                 signature comparison table. On hover, dataset information and exact logFC values are displayed for each point on the plot.", style="font-size:15px;"),
+          tags$p("The \"Color by:\" and \"Shape by:\" options allow the user to tailor the plot to their needs. The default setting is to color by tissue and shape by species.", style="font-size:15px;")
+                  ),
         tabPanel(
           "Download data",
           tags$h2("Download data"),
@@ -254,7 +387,7 @@ ui <- fluidPage(
 
 
 
-server = function(input, output) {
+server = function(input, output, session) {
   
   output$diffexpr_download <- downloadHandler(
     filename = "aging_diffexpr_data_first100.csv",
@@ -289,9 +422,49 @@ server = function(input, output) {
     "      }",
     "//    return x.toExponential(2) + ' <span style = \"color:red;font-size:22px\">&darr;</span>';",
     "    });",
+    "    $('td:eq(' + a + ')', row).css('cursor', 'pointer');",
+    "    $('td:eq(' + a + ')', row).hover(function(){",
+    "      $(this).css('color', 'blue');",
+    "//      $(this).css('text-decoration', 'underline');",
+    "      $(this).css('font-weight', 'bold');",
+    "      }, function(){",
+    "      $(this).css('color', 'black');",
+    "//      $(this).css('text-decoration', 'none currentcolor solid');",
+    "      $(this).css('font-weight', 'normal');",
+    "    });",
     "  }",
     "}"
   )
+  
+  jss = c(
+    "function(settings, json) {",
+    "  var table = this.DataTable();",
+    "  table.on(\"click.dt\", \"td\", function() {",
+    "    var row_=table.cell(this).index().row;",
+    "    var celldata = table.cell(this).data();",
+    "    var geneid = table.row(this).data()[2];",
+    "    const re1 = /<[^<>]*>/ig;",
+    "    geneid = geneid.replaceAll(re1, \"\");",
+    "    var cell = table.cell(this);",
+    "    var colindex = cell.index().column;",
+    "    var colname = table.column(colindex).header().innerText;",
+    "    let re = new RegExp(\"Brain|Muscle|Liver|Human|Mouse|Rat|All\");",
+    "    if (re.test(colname) && celldata !== null){",
+    "      var signname = colname.match(re)[0];",
+    "      Shiny.setInputValue(\"metafor_signature_js\", signname);",
+    "      Shiny.setInputValue(\"metafor_gene_js\", geneid);",
+    "      $(\".navbar-nav  li:nth-child(3) a\").click();",
+    "    }",
+    "  });",
+    "}"
+  )
+  
+  # "function(settings, json) {",
+  # "  var table = this.DataTable();",
+  
+  # "    if (colname.test(\"Brain|Muscle|Liver|Human|Mouse|Rat|All\")){",
+  # "      var signname = colname.match(\"Brain|Muscle|Liver|Human|Mouse|Rat|All\");",
+  
   
   brks = reactive(
     if (input$pval_hard_thres < input$pval_soft_thres){
@@ -313,14 +486,15 @@ server = function(input, output) {
   demo_table = (agingsignaturesapp[["Brain"]] %>% filter(presence_total >= 5) %>% arrange(adj_pval))[1:2, c("genesymbol", "entrez", "logFC", "pvalue", "adjusted_pvalue", "Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC", "Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval")]
   
   output$demo_table = DT::renderDataTable(
-    DT::datatable(demo_table, filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c(13:19))), rowCallback = JS(js), fixedColumns = list(leftColumns = 2))) %>%
+    DT::datatable(demo_table, filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c(13:19))), rowCallback = JS(js), fixedColumns = list(leftColumns = 2)), selection = "none") %>%
       formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs())) %>%
       formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), backgroundColor = styleEqual(c(NA), c("white"))) %>%
-      formatStyle(c(0:1), 'border-right' = 'solid 1.75px')
+      formatStyle(c(0:1), 'border-right' = 'solid 1.75px') %>%
+      formatStyle(c(5:5), 'border-right' = 'solid 1.75px')
   )
   
   main_table = reactive({temp = agingsignaturesapp[[input$main_signature]] %>% filter(presence_total >= input$presence) %>% filter(adj_pval < input$pval_thres) %>% arrange(adj_pval)
-                  temp$signif_total = rowSums((temp[, grepl("^(Mouse|Rat|Human|All|Brain|Muscle|Liver)_adj_pval$", colnames(temp))] < input$pval_soft_thres) & (temp[, grepl("^(Mouse|Rat|Human|All|Brain|Muscle|Liver)_adj_pval$", colnames(temp))] > -1*input$pval_soft_thres))
+                  temp$signif_total = rowSums((temp[, grepl("^(Mouse|Rat|Human|All|Brain|Muscle|Liver)_adj_pval$", colnames(temp))] < input$pval_soft_thres) & (temp[, grepl("^(Mouse|Rat|Human|All|Brain|Muscle|Liver)_adj_pval$", colnames(temp))] > -1*input$pval_soft_thres), na.rm = TRUE)
                   temp = temp %>% filter(signif_total >= input$num_signif)
                   if (length(input$upregulated_in > 0)){
                     upregcols = paste0(input$upregulated_in, "_logFC")
@@ -340,11 +514,259 @@ server = function(input, output) {
   
   #output$kek = reactive(length(colnames(main_table())))
   output$main_table = DT::renderDataTable(
-    DT::datatable(main_table(), filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c((length(colnames(main_table()))-6):(length(colnames(main_table())))))), rowCallback = JS(js), fixedColumns = list(leftColumns = 2))) %>% 
+    DT::datatable(main_table(), filter="none", extensions = "FixedColumns", escape = FALSE, class = "cell-border stripe", options = list(lengthMenu = c(25, 50, 100), scrollX=600, scrollY=600, ordering=T, columnDefs = list(list(visible=FALSE, targets=c((length(colnames(main_table()))-6):(length(colnames(main_table())))))), initComplete = JS(jss), rowCallback = JS(js), fixedColumns = list(leftColumns = 2)), selection = "none") %>% 
       formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), valueColumns = c("Brain_adj_pval", "Muscle_adj_pval", "Liver_adj_pval", "Mouse_adj_pval", "Human_adj_pval", "Rat_adj_pval", "All_adj_pval"), backgroundColor = styleInterval(brks(), clrs())) %>%
       formatStyle(c("Brain_logFC", "Muscle_logFC", "Liver_logFC", "Mouse_logFC", "Human_logFC", "Rat_logFC", "All_logFC"), backgroundColor = styleEqual(c(NA), c("white"))) %>%
-      formatStyle(c(0:1), 'border-right' = 'solid 1.75px')
+      formatStyle(c(0:1), 'border-right' = 'solid 1.75px') %>%
+      formatStyle(c(5:5), 'border-right' = 'solid 1.75px')
   )
+  
+  observeEvent(input$metafor_signature_js, 
+               {updateSelectInput(session, inputId = "metafor_signature", selected = input$metafor_signature_js)
+                })
+  
+  observeEvent(input$metafor_signature, 
+               {temp = input$metafor_gene
+                updateSelectizeInput(session, inputId = "metafor_gene", selected = temp, choices = metafor_genes[[input$metafor_signature]])})
+  
+  # observeEvent(input$metafor_gene_js, 
+  #              {updateMultiInput(session, inputId = "metafor_gene", selected = input$metafor_gene_js)})
+  observeEvent(input$metafor_gene_js, {
+    #session$sendCustomMessage("metafor_gene_send", input$metafor_gene_js)
+    updateSelectizeInput(session, inputId = "metafor_gene", selected = input$metafor_gene_js)
+  })
+  
+  output$metafor_demo = renderPlotly({
+    name = "All"
+    
+    # filter datasets for the individual signature:
+    logFCmatrixchosen = logFCmatrixregr[, chosencols[[name]]]
+    SEmatrixchosen = SEmatrixregr[, chosencols[[name]]]
+    
+    
+    # get the deming coefs:
+    minimums = c()
+    for (i in 1:10){
+      #deminglist[[name]][[i]] = deming_minimizer(logFCmatrixchosen)
+      minimums = c(minimums, deminglist[[name]][[i]]$minimum)
+    }
+    kres = deminglist[[name]][[which.min(minimums)]]$coefs
+    
+    # normalize by deming coefficients:
+    
+    for (i in 1:length(colnames(logFCmatrixchosen))){
+      SEmatrixchosen[,i] = SEmatrixchosen[,i] / kres[i]
+      logFCmatrixchosen[,i] = logFCmatrixchosen[,i] / kres[i]
+    }
+    
+    # discard bad boys:
+    logFCmatrixchosen$NACount = rowSums(is.na(logFCmatrixchosen))
+    if (name != "Liver"){
+      #ggplot(logFCmatrixchosen, aes(x = NACount)) + geom_density() + geom_vline(xintercept = floor(length(colnames(logFCmatrixchosen))/2))
+      goodboys = subset(rownames(logFCmatrixchosen), logFCmatrixchosen$NACount < floor(length(colnames(logFCmatrixchosen))/2))
+    } else {
+      #ggplot(logFCmatrixchosen, aes(x = NACount)) + geom_density() + geom_vline(xintercept = 4)
+      goodboys = subset(rownames(logFCmatrixchosen), logFCmatrixchosen$NACount < 4)
+    }
+    logFCmatrixchosen = subset(logFCmatrixchosen, rownames(logFCmatrixchosen) %in% goodboys)
+    SEmatrixchosen = subset(SEmatrixchosen, rownames(SEmatrixchosen) %in% goodboys)
+    logFCmatrixchosen$NACount = NULL
+    
+    helpertable = as.data.frame(t(logFCmatrixchosen["72930",]), stringsAsFactors = FALSE)
+    rownames(helpertable) = colnames(logFCmatrixchosen)
+    colnames(helpertable) = c("logFC")
+    helpertable$SE = as.numeric(as.character(t(SEmatrixchosen["72930",])))
+    helpertable$source = as.character(sourcedata[rownames(helpertable),"dataset"])
+    helpertable$dataset = rownames(helpertable)
+    helpertable$species = sub("^([^_]+)_(.*)", "\\1", rownames(helpertable))
+    helpertable$tissue = sub("^([^_]+)_([^_]+)_([^_]+)_(.*)", "\\3", rownames(helpertable))
+    helpertable$tissue = sub("Frontalcortex", "Brain", helpertable$tissue)
+    helpertable$tissue = sub("Cerebellum", "Brain", helpertable$tissue)
+    helpertable$tissue = sub("LimbMuscle", "Muscle", helpertable$tissue)
+    helpertable$sex = sub("^([^_]+)_([^_]+)_([^_]+)_([^_]+)(.*)", "\\4", rownames(helpertable))
+    helpertable$sex = sub("NoSex", "Unknown", helpertable$sex)
+    helpertable = left_join(helpertable, strain_map, by="source")
+    if (sum(str_count(helpertable$dataset, "_")) != 0){
+      helpertable[which(str_count(helpertable$dataset, "_") == 4),"strain"] = sub("^([^_]+)_([^_]+)_([^_]+)_([^_]+)_(.*)", "\\5", helpertable[which(str_count(helpertable$dataset, "_") == 4),"dataset"])
+    }
+    helpertable$colorby = helpertable[,"tissue"]
+    helpertable$shapeby = helpertable[,"species"]
+    helpertable = na.omit(helpertable)
+    #helpertable = data.frame(helpertable, stringsAsFactors = FALSE)
+    helpertable = helpertable %>% arrange(dataset)
+    #helpertablelist[[input$metafor_gene]] = helpertable
+    border = max(abs(helpertable$logFC)) + max(helpertable$SE)
+    
+    # fig <- plot_ly(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter', mode = 'markers',
+    #                color= ~tissue, symbol= ~species, colors = gg_color_hue(length(unique(helpertable$tissue))),
+    #                error_y = ~list(array = SE),
+    #                marker = list(size=10))
+    # 
+    # 
+    helpertable$dummy = rep("", length(rownames(helpertable)))
+    
+    rainbow_hues = gg_color_hue(length(unique(helpertable$colorby)))
+    
+    fig <- plot_ly(data = helpertable, colors = c("black", rainbow_hues)) %>%
+      add_markers(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter',
+                  color= ~colorby, legendgroup = "Tissue", hoverinfo = "none") %>%
+      add_markers(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter',
+                  symbol= ~shapeby, color = ~dummy, legendgroup = "Species", hoverinfo = "none")
+    for (i in 1:length(unique(helpertable$colorby))){
+      one_color = unique(helpertable$colorby)[i]
+      for (j in 1:length(unique(helpertable[which(helpertable$colorby == one_color),]$shapeby))){
+        one_shape = unique(helpertable[which(helpertable$colorby == one_color),]$shapeby)[j]
+        fig = fig %>% add_markers(data = helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),], x = ~dataset, y = ~logFC, type = 'scatter',
+                                  error_y = ~list(array = SE),
+                                  text = as.character(formatC(helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$SE, digits = 2, format="f")),
+                                  color = ~colorby,
+                                  colors = helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$colorby,
+                                  symbol = ~shapeby,
+                                  symbols = helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$shapeby,
+                                  marker = list(size=10),
+                                  showlegend=FALSE,
+                                  hovertemplate = paste(
+                                    '<br><b>LogFC</b>: %{y:.2f}&plusmn;', formatC(helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$SE, digits = 2, format = "f"), '<extra></extra>',
+                                    '<br><b>Species</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$species,
+                                    '<br><b>Study</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$source,
+                                    '<br><b>Tissue</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$tissue,
+                                    '<br><b>Sex</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$sex,
+                                    '<br><b>Strain</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$strain)
+        )
+      }
+    }
+    
+    fig %>% layout(title = paste0("Mixed effects model for gene ", maintable[which(maintable$entrez == "72930"),'genesymbol'], " in ", "Compound", " signature"),  shapes = list(hline(agingsignatures_v3[[name]]["72930", "logFC"])), xaxis= list(showticklabels = FALSE, categoryorder = "array", categoryarray = helpertable[,"colorby"]))
+  })  
+
+  output$metafor_plot <- renderPlotly({
+    name = input$metafor_signature
+      
+    # filter datasets for the individual signature:
+    logFCmatrixchosen = logFCmatrixregr[, chosencols[[name]]]
+    SEmatrixchosen = SEmatrixregr[, chosencols[[name]]]
+    
+    
+    # get the deming coefs:
+    minimums = c()
+    for (i in 1:10){
+      #deminglist[[name]][[i]] = deming_minimizer(logFCmatrixchosen)
+      minimums = c(minimums, deminglist[[name]][[i]]$minimum)
+    }
+    kres = deminglist[[name]][[which.min(minimums)]]$coefs
+    
+    # normalize by deming coefficients:
+    
+    for (i in 1:length(colnames(logFCmatrixchosen))){
+      SEmatrixchosen[,i] = SEmatrixchosen[,i] / kres[i]
+      logFCmatrixchosen[,i] = logFCmatrixchosen[,i] / kres[i]
+    }
+    
+    # discard bad boys:
+    logFCmatrixchosen$NACount = rowSums(is.na(logFCmatrixchosen))
+    if (name != "Liver"){
+      #ggplot(logFCmatrixchosen, aes(x = NACount)) + geom_density() + geom_vline(xintercept = floor(length(colnames(logFCmatrixchosen))/2))
+      goodboys = subset(rownames(logFCmatrixchosen), logFCmatrixchosen$NACount < floor(length(colnames(logFCmatrixchosen))/2))
+    } else {
+      #ggplot(logFCmatrixchosen, aes(x = NACount)) + geom_density() + geom_vline(xintercept = 4)
+      goodboys = subset(rownames(logFCmatrixchosen), logFCmatrixchosen$NACount < 4)
+    }
+    logFCmatrixchosen = subset(logFCmatrixchosen, rownames(logFCmatrixchosen) %in% goodboys)
+    SEmatrixchosen = subset(SEmatrixchosen, rownames(SEmatrixchosen) %in% goodboys)
+    logFCmatrixchosen$NACount = NULL
+    
+    if (input$metafor_gene == ""){
+      fig <- plot_ly() %>%
+        layout(xaxis = list("visible" = FALSE), yaxis = list("visible" = FALSE), annotations = list("text" = "Please select a gene",
+                                                                                                    "xref" = "paper",
+                                                                                                    "yref" = "paper",
+                                                                                                    "showarrow" = FALSE,
+                                                                                                    "font" = list("size" = 28)
+        ))
+    } else if (!(input$metafor_gene %in% rownames(logFCmatrixchosen)) | is.na(agingsignatures_v3[[name]][input$metafor_gene, "logFC"])){
+      
+      fig <- plot_ly() %>%
+        layout(xaxis = list("visible" = FALSE), yaxis = list("visible" = FALSE), annotations = list("text" = "Gene is not present in this signature",
+                                                                                                    "xref" = "paper",
+                                                                                                    "yref" = "paper",
+                                                                                                    "showarrow" = FALSE,
+                                                                                                    "font" = list("size" = 28)
+        ))
+      
+    } else {
+      
+      helpertable = as.data.frame(t(logFCmatrixchosen[input$metafor_gene,]), stringsAsFactors = FALSE)
+      rownames(helpertable) = colnames(logFCmatrixchosen)
+      colnames(helpertable) = c("logFC")
+      helpertable$SE = as.numeric(as.character(t(SEmatrixchosen[input$metafor_gene,])))
+      helpertable$source = as.character(sourcedata[rownames(helpertable),"dataset"])
+      helpertable$dataset = rownames(helpertable)
+      helpertable$species = sub("^([^_]+)_(.*)", "\\1", rownames(helpertable))
+      helpertable$tissue = sub("^([^_]+)_([^_]+)_([^_]+)_(.*)", "\\3", rownames(helpertable))
+      helpertable$tissue = sub("Frontalcortex", "Brain", helpertable$tissue)
+      helpertable$tissue = sub("Cerebellum", "Brain", helpertable$tissue)
+      helpertable$tissue = sub("LimbMuscle", "Muscle", helpertable$tissue)
+      helpertable$sex = sub("^([^_]+)_([^_]+)_([^_]+)_([^_]+)(.*)", "\\4", rownames(helpertable))
+      helpertable$sex = sub("NoSex", "Unknown", helpertable$sex)
+      helpertable = left_join(helpertable, strain_map, by="source")
+      if (sum(str_count(helpertable$dataset, "_")) != 0){
+        helpertable[which(str_count(helpertable$dataset, "_") == 4),"strain"] = sub("^([^_]+)_([^_]+)_([^_]+)_([^_]+)_(.*)", "\\5", helpertable[which(str_count(helpertable$dataset, "_") == 4),"dataset"])
+      }
+      helpertable$colorby = helpertable[,input$metafor_color]
+      helpertable$shapeby = helpertable[,input$metafor_shape]
+      helpertable = na.omit(helpertable)
+      #helpertable = data.frame(helpertable, stringsAsFactors = FALSE)
+      helpertable = helpertable %>% arrange(dataset)
+      #helpertablelist[[input$metafor_gene]] = helpertable
+      border = max(abs(helpertable$logFC)) + max(helpertable$SE)
+      
+      # fig <- plot_ly(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter', mode = 'markers',
+      #                color= ~tissue, symbol= ~species, colors = gg_color_hue(length(unique(helpertable$tissue))),
+      #                error_y = ~list(array = SE),
+      #                marker = list(size=10))
+      # 
+      # 
+      helpertable$dummy = rep("", length(rownames(helpertable)))
+      
+      rainbow_hues = gg_color_hue(length(unique(helpertable$colorby)))
+      
+      fig <- plot_ly(data = helpertable, colors = c("black", rainbow_hues)) %>%
+        add_markers(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter',
+                    color= ~colorby, legendgroup = "Tissue", hoverinfo = "none") %>%
+        add_markers(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter',
+                    symbol= ~shapeby, color = ~dummy, legendgroup = "Species", hoverinfo = "none")
+      for (i in 1:length(unique(helpertable$colorby))){
+        one_color = unique(helpertable$colorby)[i]
+        for (j in 1:length(unique(helpertable[which(helpertable$colorby == one_color),]$shapeby))){
+          one_shape = unique(helpertable[which(helpertable$colorby == one_color),]$shapeby)[j]
+          fig = fig %>% add_markers(data = helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),], x = ~dataset, y = ~logFC, type = 'scatter',
+                                    error_y = ~list(array = SE),
+                                    text = as.character(formatC(helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$SE, digits = 2, format="f")),
+                                    color = ~colorby,
+                                    colors = helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$colorby,
+                                    symbol = ~shapeby,
+                                    symbols = helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$shapeby,
+                                    marker = list(size=10),
+                                    showlegend=FALSE,
+                                    hovertemplate = paste(
+                                      '<br><b>LogFC</b>: %{y:.2f}&plusmn;', formatC(helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$SE, digits = 2, format = "f"), '<extra></extra>',
+                                      '<br><b>Species</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$species,
+                                      '<br><b>Study</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$source,
+                                      '<br><b>Tissue</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$tissue,
+                                      '<br><b>Sex</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$sex,
+                                      '<br><b>Strain</b>: ', helpertable[which(helpertable$colorby == one_color & helpertable$shapeby == one_shape),]$strain)
+          )
+        }
+      }
+      
+      if (name == "All"){
+        fig %>% layout(title = paste0("Mixed effects model for gene ", maintable[which(maintable$entrez == input$metafor_gene),'genesymbol'], " in ", "Compound", " signature"),  shapes = list(hline(agingsignatures_v3[[name]][input$metafor_gene, "logFC"])), xaxis= list(showticklabels = FALSE, categoryorder = "array", categoryarray = helpertable[,"colorby"]))
+      } else {
+        fig %>% layout(title = paste0("Mixed effects model for gene ", maintable[which(maintable$entrez == input$metafor_gene),'genesymbol'], " in ", name, " signature"),  shapes = list(hline(agingsignatures_v3[[name]][input$metafor_gene, "logFC"])), xaxis= list(showticklabels = FALSE, categoryorder = "array", categoryarray = helpertable[,"colorby"]))
+      }
+      
+    }
+  })
   
 }
 
