@@ -7,6 +7,10 @@ library(magrittr)
 library(shinyWidgets)
 library(plotly)
 library(shinycssloaders)
+library(htmlwidgets)
+
+#library(shinyjs)
+#library(logging)
 
 # prepare stuff for metafor plots
 
@@ -50,6 +54,16 @@ gg_color_hue <- function(n) {
   hues = seq(15, 375, length = n + 1)
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
+
+#prepare stuff for dataset plots
+load("phenolist2.RData")
+load("exprlist3.RData")
+load("logFCtablelist3.RData")
+load("ageunittable.RData")
+
+names(logFCtablelist) = sub(" ", "", names(logFCtablelist))
+names(sexyexprlist) = sub(" ", "", names(sexyexprlist))
+names(sexyphenolist) = sub(" ", "", names(sexyphenolist))
 
 # load the signature list
 load("agingsignatures_v4_ABDB.RData")
@@ -141,6 +155,8 @@ for (name in names(agingsignaturesapp)){
   agingsignaturesapp[[name]]$entrez = paste0('<a href="https://www.ncbi.nlm.nih.gov/gene/?term=', agingsignaturesapp[[name]]$entrez, '">', agingsignaturesapp[[name]]$entrez, '</a>')
 }
 
+agingsignaturesapp$Mouse = agingsignaturesapp$Mouse[-which(is.na(agingsignaturesapp$Mouse$genesymbol)), ]
+
 metafor_genes = list()
 for (name in names(agingsignaturesapp)){
   metafor_genes[[name]] = gsub("(<[^<>]+>)", "", agingsignaturesapp[[name]]$entrez)
@@ -150,6 +166,7 @@ for (name in names(agingsignaturesapp)){
 
 
 ui <- fluidPage(
+  #useShinyjs(),
   tags$script("
     Shiny.addCustomMessageHandler('metafor_gene_send', function(value) {
     Shiny.setInputValue('metafor_gene', value);
@@ -305,7 +322,8 @@ ui <- fluidPage(
                mainPanel(
                  withSpinner(
                   plotlyOutput(outputId = "metafor_plot")
-                 )
+                 ),
+                 plotlyOutput(outputId = "dataset_plot", height = "100%")
                )
              )
              
@@ -365,7 +383,16 @@ ui <- fluidPage(
                  (the number displayed in the signature comparison table). Each point of the scatter plot represents mean logFC from a specific dataset from the signature in which the gene was present, with error bars showing the standard error for this dataset. The gene and signature 
                  for the plot can be chosen manually in the menus at the left of the table, or they will be set automatically when the user clicks on a cell in the right part of the 
                  signature comparison table. On hover, dataset information and exact logFC values are displayed for each point on the plot.", style="font-size:15px;"),
-          tags$p("The \"Color by:\" and \"Shape by:\" options allow the user to tailor the plot to their needs. The default setting is to color by tissue and shape by species.", style="font-size:15px;")
+          tags$p("The \"Color by:\" and \"Shape by:\" options allow the user to tailor the plot to their needs. The default setting is to color by tissue and shape by species.", style="font-size:15px;"),
+          tags$h2("Dataset plot"),
+          withSpinner(
+            plotlyOutput(outputId = "datasetplot_demo", height = "100%")
+          ),
+          tags$p("Clicking on any point on the mixed effect model plot will trigger the appearance of a dataset plot (at the bottom of the page). The dataset plot shows how the expression of the chosen gene changes across samples with different age in 
+                 the dataset the clicked point corresponds to. By looking at this plot one can see where the logFC value and its standard error come from. The slope of the regression line corresponds to the logFC value, whereas the standard error (signified by the confidence interval 
+                 around the line) arises from points (i.e. samples, these may be individual mice, rats or humans) being far away from the regression line. Please make note that when there are a lot of points, the confidence interval is always relatively small. On some plots 
+                 the exact age of samples is not available (e.g. they are denoted as \"young\" and \"old\") and therefore the regression line cannot be fitted on the plot.", style="font-size:15px;")
+          
                   ),
         tabPanel(
           "Download data",
@@ -386,9 +413,25 @@ ui <- fluidPage(
 )
 
 
+# basicConfig()
+# 
+# options(shiny.error = function() { 
+#   logging::logerror(sys.calls() %>% as.character %>% paste(collapse = ", ")) })
+
+
 
 server = function(input, output, session) {
   
+  # printLogJs <- function(x, ...) {
+  #   
+  #   logjs(x)
+  #   
+  #   T
+  # }
+  # 
+  # addHandler(printLogJs)
+  # 
+  # 
   output$diffexpr_download <- downloadHandler(
     filename = "aging_diffexpr_data_first100.csv",
     content = function(file) {
@@ -682,7 +725,7 @@ server = function(input, output, session) {
                                                                                                     "yref" = "paper",
                                                                                                     "showarrow" = FALSE,
                                                                                                     "font" = list("size" = 28)
-        ))
+        )) %>% config(displayModeBar = F)
     } else if (!(input$metafor_gene %in% rownames(logFCmatrixchosen)) | is.na(agingsignatures_v3[[name]][input$metafor_gene, "logFC"])){
       
       fig <- plot_ly() %>%
@@ -691,7 +734,7 @@ server = function(input, output, session) {
                                                                                                     "yref" = "paper",
                                                                                                     "showarrow" = FALSE,
                                                                                                     "font" = list("size" = 28)
-        ))
+        )) %>% config(displayModeBar = F)
       
     } else {
       
@@ -734,7 +777,18 @@ server = function(input, output, session) {
         add_markers(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter',
                     color= ~colorby, legendgroup = "Tissue", hoverinfo = "none") %>%
         add_markers(data = helpertable, x = ~dataset, y = ~logFC, type = 'scatter',
-                    symbol= ~shapeby, color = ~dummy, legendgroup = "Species", hoverinfo = "none")
+                    symbol= ~shapeby, color = ~dummy, legendgroup = "Species", hoverinfo = "none") %>%
+        onRender("
+                 function(el, x) {
+                   el.on('plotly_click', function(d) {
+                     var point = d.points[0];
+                     //console.log('Click: ', d);
+                     var mypoint = point.x;
+                     Shiny.setInputValue(\"dataset_id_js\", mypoint);
+                   });
+                 }") %>% config(displayModeBar = F)
+        
+
       for (i in 1:length(unique(helpertable$colorby))){
         one_color = unique(helpertable$colorby)[i]
         for (j in 1:length(unique(helpertable[which(helpertable$colorby == one_color),]$shapeby))){
@@ -767,6 +821,144 @@ server = function(input, output, session) {
       
     }
   })
+  
+  output$dataset_plot = renderPlotly({
+    #event.data <- event_data(event = "plotly_click", source = "metafor_plot")
+    #View(event.data)
+    if (length(input$dataset_id_js) != 0){
+
+      # EXPR PLOT
+      genename = input$metafor_gene
+      dataset_id = input$dataset_id_js
+
+
+      if (str_count(dataset_id, "_") == 3){
+        strain = strain_map[which(strain_map$source == sub("([^_]+)_([^_]+)_.*", "\\2", dataset_id)), "strain"]
+        sex = sub("([^_]+)_([^_]+)_([^_]+)_([^_]+)", "\\4", dataset_id)
+      } else if (str_count(dataset_id, "_") == 4){
+        sex = sub("([^_]+)_([^_]+)_([^_]+)_([^_]+)_([^_]+)", "\\4", dataset_id)
+        strain = sub("([^_]+)_([^_]+)_([^_]+)_([^_]+)_([^_]+)", "\\5", dataset_id)
+      }
+
+      topgenes = logFCtablelist[[dataset_id]]
+      if ((is.numeric(sexyphenolist[[dataset_id]]$Age)) | (sum(grepl("^[A-Za-z]+$", sexyphenolist[[dataset_id]]$Age)) == 0)){
+        copps = as.data.frame(cbind(colnames(sexyexprlist[[dataset_id]]), as.numeric(sexyexprlist[[dataset_id]][genename,]), as.integer(sexyphenolist[[dataset_id]]$Age)))
+        copps$V3 = as.integer(as.character(copps$V3))
+      } else {
+        copps = as.data.frame(cbind(colnames(sexyexprlist[[dataset_id]]), as.numeric(sexyexprlist[[dataset_id]][genename,]), casefold(sexyphenolist[[dataset_id]]$Age, upper=F)))
+        copps$V3 = relevel(factor(copps$V3), ref="young")
+      }
+      copps$V2 = as.double(as.character(copps$V2))
+      # copps$V2 = as.numeric(sub(",", ".", copps$V2))
+      copps = copps %>% arrange(V2)
+      
+      if (sum(is.na(copps$V2)) == 0){
+        kek = ggplot(copps, aes(x = copps$V3, y = copps$V2)) + geom_point(color = "blue", aes(text=NULL)) + labs(x = paste0("age in ", ageunittable[sub("([^_]+)_([^_]+)_.*", "\\2", dataset_id), "unit"]), y = "normalized expression (log scale)",title = paste0("Gene symbol: ", maintable[which(maintable$entrez == genename),'genesymbol'], "\n",
+                                                                                                                                                                                                                                                                   "Species: ", sub("([^_]+)_([^_]+)_([^_]+)_.*", "\\1", dataset_id), "\n",
+                                                                                                                                                                                                                                                                   "Study: ", sub("([^_]+)_([^_]+)_([^_]+)_.*", "\\2", dataset_id), "\n",
+                                                                                                                                                                                                                                                                   "Tissue: ", sub("([^_]+)_([^_]+)_([^_]+)_.*", "\\3", dataset_id), "\n",
+                                                                                                                                                                                                                                                                   "Sex: ", sex, "\n",
+                                                                                                                                                                                                                                                                   "Strain: ", strain, "\n")) +
+          theme_minimal() + geom_smooth(method='lm', formula= y~x) + theme(plot.title = element_text(size=9), plot.margin = margin(t=100, l=30, b=5))
+        
+        fig <- ggplotly(kek) %>% config(displayModeBar = F)
+        style(fig, hoverinfo = "none")
+      } else {
+        fig <- plot_ly() %>%
+          layout(xaxis = list("visible" = FALSE), yaxis = list("visible" = FALSE), annotations = list("text" = "Plot not available",
+                                                                                                      "xref" = "paper",
+                                                                                                      "yref" = "paper",
+                                                                                                      "showarrow" = FALSE,
+                                                                                                      "font" = list("size" = 28)
+          )) %>% config(displayModeBar = F)
+      }
+      
+      
+      # fig %>% layout(title=list("y" = 0.9, "font" = list(
+      #
+      #   "size" = 12
+      #
+      #   )), margin = list(
+      #     "t" = 125
+      #   )
+      # )
+
+    } else {
+      fig <- plot_ly() %>%
+        layout(xaxis = list("visible" = FALSE), yaxis = list("visible" = FALSE), annotations = list("text" = "Please click on a dataset",
+                                                                                                    "xref" = "paper",
+                                                                                                    "yref" = "paper",
+                                                                                                    "showarrow" = FALSE,
+                                                                                                    "font" = list("size" = 28)
+        )) %>% config(displayModeBar = F)
+      #ggplot() + theme_void()
+    }
+
+
+  })
+  
+  output$datasetplot_demo = renderPlotly({
+    #event.data <- event_data(event = "plotly_click", source = "metafor_plot")
+    #View(event.data)
+      
+    # EXPR PLOT
+    genename = "12268"
+    dataset_id = "Mouse_GSE132040_Brain_Male"
+    
+    
+    if (str_count(dataset_id, "_") == 3){
+      strain = strain_map[which(strain_map$source == sub("([^_]+)_([^_]+)_.*", "\\2", dataset_id)), "strain"]
+      sex = sub("([^_]+)_([^_]+)_([^_]+)_([^_]+)", "\\4", dataset_id)
+    } else if (str_count(dataset_id, "_") == 4){
+      sex = sub("([^_]+)_([^_]+)_([^_]+)_([^_]+)_([^_]+)", "\\4", dataset_id)
+      strain = sub("([^_]+)_([^_]+)_([^_]+)_([^_]+)_([^_]+)", "\\5", dataset_id)
+    }
+    
+    topgenes = logFCtablelist[[dataset_id]]
+    if ((is.numeric(sexyphenolist[[dataset_id]]$Age)) | (sum(grepl("^[A-Za-z]+$", sexyphenolist[[dataset_id]]$Age)) == 0)){
+      copps = as.data.frame(cbind(colnames(sexyexprlist[[dataset_id]]), as.numeric(sexyexprlist[[dataset_id]][genename,]), as.integer(sexyphenolist[[dataset_id]]$Age)))
+      copps$V3 = as.integer(as.character(copps$V3))
+    } else {
+      copps = as.data.frame(cbind(colnames(sexyexprlist[[dataset_id]]), as.numeric(sexyexprlist[[dataset_id]][genename,]), casefold(sexyphenolist[[dataset_id]]$Age, upper=F)))
+      copps$V3 = relevel(factor(copps$V3), ref="young")
+    }
+    copps$V2 = as.double(as.character(copps$V2))
+    # copps$V2 = as.numeric(sub(",", ".", copps$V2))
+    copps = copps %>% arrange(V2)
+    
+    kek = ggplot(copps, aes(x = copps$V3, y = copps$V2)) + geom_point(color = "blue", aes(text=NULL)) + labs(x = paste0("age in ", ageunittable[sub("([^_]+)_([^_]+)_.*", "\\2", dataset_id), "unit"]), y = "normalized expression (log scale)",title = paste0("Gene symbol: ", maintable[which(maintable$entrez == genename),'genesymbol'], "\n",
+                                                                                                                                                                                                                                                               "Species: ", sub("([^_]+)_([^_]+)_([^_]+)_.*", "\\1", dataset_id), "\n",
+                                                                                                                                                                                                                                                               "Study: ", sub("([^_]+)_([^_]+)_([^_]+)_.*", "\\2", dataset_id), "\n",
+                                                                                                                                                                                                                                                               "Tissue: ", sub("([^_]+)_([^_]+)_([^_]+)_.*", "\\3", dataset_id), "\n",
+                                                                                                                                                                                                                                                               "Sex: ", sex, "\n",
+                                                                                                                                                                                                                                                               "Strain: ", strain, "\n")) +
+      theme_minimal() + geom_smooth(method='lm', formula= y~x) + theme(plot.title = element_text(size=9), plot.margin = margin(t=100, l=30, b=5))
+    
+    fig <- ggplotly(kek) %>% config(displayModeBar = F)
+    style(fig, hoverinfo = "none")
+    
+  })
+  
+  
+  # 
+  # output$dataset_plot = renderPlot({
+  #   #event.data <- event_data(event = "plotly_click", source = "metafor_plot")
+  #   #View(event.data)
+  #   
+  #   # EXPR PLOT
+  #   genename = input$metafor_gene
+  #   dataset_id = input$dataset_id_js
+  #   topgenes = logFCtablelist[[dataset_id]]
+  #   copps = as.data.frame(cbind(colnames(sexyexprlist[[dataset_id]]), as.numeric(sexyexprlist[[dataset_id]][genename,]), as.integer(sexyphenolist[[dataset_id]]$Age)))
+  #   copps$V3 = as.integer(as.character(copps$V3))
+  #   copps$V2 = as.double(as.character(copps$V2))
+  #   # copps$V2 = as.numeric(sub(",", ".", copps$V2))
+  #   copps = copps %>% arrange(V2)
+  #   ggplot(copps, aes(x = copps$V3, y = copps$V2, color = copps$V3)) + geom_point() + labs(colour = "age", x = "age", y = "Expression",title = paste("entrez ID", genename, sep = " "))
+  #   
+  # })
+  
+  #options(shiny.error = NULL)
   
 }
 
